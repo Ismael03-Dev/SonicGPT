@@ -1,8 +1,10 @@
 const express = require("express");
 const crypto = require("crypto");
 const { db, ensureSchema } = require("../db");
-const { DEFAULT_MODEL, SYSTEM_PROMPT, resolveModel, MODELS } = require("../config/models");
-const { completeMistralChat, streamMistralChat } = require("../services/mistral");
+const { DEFAULT_MODEL, buildSystemPrompt, resolveModel, MODELS } = require("../config/models");
+const { runToolLoop } = require("../services/agent");
+const { TOOLS } = require("../config/tools");
+const { simulateStream } = require("../utils/streamText");
 
 const router = express.Router();
 
@@ -11,7 +13,6 @@ function makeTitle(text) {
     return clean.length > 60 ? clean.slice(0, 57) + "..." : clean || "Nouvelle conversation";
 }
 
-// POST /v1/conversations — créer une conversation
 router.post("/conversations", async (req, res) => {
     await ensureSchema();
     try {
@@ -33,7 +34,6 @@ router.post("/conversations", async (req, res) => {
     }
 });
 
-// GET /v1/conversations?ownerId=&page=1&limit=20
 router.get("/conversations", async (req, res) => {
     await ensureSchema();
     try {
@@ -58,7 +58,6 @@ router.get("/conversations", async (req, res) => {
     }
 });
 
-// GET /v1/conversations/:id — conversation + tous ses messages
 router.get("/conversations/:id", async (req, res) => {
     await ensureSchema();
     try {
@@ -81,7 +80,6 @@ router.get("/conversations/:id", async (req, res) => {
     }
 });
 
-// DELETE /v1/conversations/:id
 router.delete("/conversations/:id", async (req, res) => {
     await ensureSchema();
     try {
@@ -99,12 +97,17 @@ router.delete("/conversations/:id", async (req, res) => {
     }
 });
 
-// POST /v1/conversations/:id/messages — envoyer un message, obtenir la réponse
-// de SonicGPT (streaming par défaut), avec persistance automatique des deux messages.
 router.post("/conversations/:id/messages", async (req, res) => {
     await ensureSchema();
     try {
-        const { content, stream = true, temperature = 0.7, max_tokens = 1024 } = req.body || {};
+        const {
+            content,
+            stream = true,
+            temperature = 0.7,
+            max_tokens = 1024,
+            webAccess = true
+        } = req.body || {};
+
         if (!content || typeof content !== "string") {
             return res.status(400).json({ error: { message: "Le champ 'content' (string) est requis." } });
         }
@@ -121,9 +124,12 @@ router.post("/conversations/:id/messages", async (req, res) => {
             args: [req.params.id]
         });
         const history = historyResult.rows.map(r => ({ role: r.role, content: r.content }));
-        const fullMessages = [{ role: "system", content: SYSTEM_PROMPT }, ...history, { role: "user", content }];
+        const fullMessages = [
+            { role: "system", content: buildSystemPrompt() },
+            ...history,
+            { role: "user", content }
+        ];
 
-        // Titre auto sur le premier message de la conversation
         const isFirstMessage = history.length === 0;
 
         await db.execute({
@@ -158,36 +164,45 @@ router.post("/conversations/:id/messages", async (req, res) => {
             res.flushHeaders();
 
             try {
-                const { content: assistantContent, finishReason } = await streamMistralChat({
+                const { content: assistantContent, finishReason } = await runToolLoop({
                     model: modelConfig.mistralModel,
                     messages: fullMessages,
+                    tools: webAccess ? TOOLS : undefined,
                     temperature,
                     maxTokens: max_tokens,
-                    onDelta: (delta) => {
-                        res.write(`data: ${JSON.stringify({ delta, done: false })}\n\n`);
+                    onToolCall: ({ name, args }) => {
+                        res.write(
+                            `data: ${JSON.stringify({ type: "tool_call", tool: name, input: args, done: false })}\n\n`
+                        );
                     }
                 });
-                res.write(`data: ${JSON.stringify({ delta: "", done: true, finishReason })}\n\n`);
+
+                await simulateStream(assistantContent, (chunk) => {
+                    res.write(`data: ${JSON.stringify({ type: "delta", delta: chunk, done: false })}\n\n`);
+                });
+
+                res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason })}\n\n`);
                 res.end();
                 await finalizeConversation(assistantContent);
             } catch (e) {
                 console.error(e);
-                res.write(`data: ${JSON.stringify({ error: "Erreur du modèle.", done: true })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: "error", error: "Erreur du modèle.", done: true })}\n\n`);
                 res.end();
             }
             return;
         }
 
-        const { content: assistantContent, finishReason, usage } = await completeMistralChat({
+        const { content: assistantContent, finishReason, usage, toolsUsed } = await runToolLoop({
             model: modelConfig.mistralModel,
             messages: fullMessages,
+            tools: webAccess ? TOOLS : undefined,
             temperature,
             maxTokens: max_tokens
         });
 
         await finalizeConversation(assistantContent);
 
-        res.json({ role: "assistant", content: assistantContent, finishReason, usage });
+        res.json({ role: "assistant", content: assistantContent, finishReason, usage, toolsUsed });
     } catch (e) {
         console.error(e);
         res.status(500).json({ error: { message: "Erreur serveur." } });
