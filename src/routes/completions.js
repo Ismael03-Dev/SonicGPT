@@ -1,12 +1,13 @@
 const express = require("express");
 const crypto = require("crypto");
 const { db, ensureSchema } = require("../db");
-const { MODELS, DEFAULT_MODEL, SYSTEM_PROMPT, resolveModel } = require("../config/models");
-const { completeMistralChat, streamMistralChat } = require("../services/mistral");
+const { MODELS, DEFAULT_MODEL, buildSystemPrompt, resolveModel } = require("../config/models");
+const { runToolLoop } = require("../services/agent");
+const { TOOLS } = require("../config/tools");
+const { simulateStream } = require("../utils/streamText");
 
 const router = express.Router();
 
-// GET /v1/models — format proche de l'API OpenAI
 router.get("/models", (req, res) => {
     res.json({
         object: "list",
@@ -19,10 +20,6 @@ router.get("/models", (req, res) => {
     });
 });
 
-// POST /v1/chat/completions — stateless, format OpenAI.
-// Le client envoie tout l'historique dans "messages" à chaque appel,
-// comme avec l'API OpenAI/Claude classique. Persistance optionnelle
-// si un "conversation_id" existant est fourni.
 router.post("/chat/completions", async (req, res) => {
     try {
         const {
@@ -31,7 +28,8 @@ router.post("/chat/completions", async (req, res) => {
             stream = false,
             temperature = 0.7,
             max_tokens = 1024,
-            conversation_id
+            conversation_id,
+            webAccess = true
         } = req.body || {};
 
         if (!Array.isArray(messages) || messages.length === 0) {
@@ -41,7 +39,7 @@ router.post("/chat/completions", async (req, res) => {
         }
 
         const modelConfig = resolveModel(model);
-        const fullMessages = [{ role: "system", content: SYSTEM_PROMPT }, ...messages];
+        const fullMessages = [{ role: "system", content: buildSystemPrompt() }, ...messages];
         const completionId = `chatcmpl-${crypto.randomUUID()}`;
         const created = Math.floor(Date.now() / 1000);
 
@@ -88,13 +86,16 @@ router.post("/chat/completions", async (req, res) => {
 
             try {
                 sendChunk({ role: "assistant" });
-                const { content, finishReason } = await streamMistralChat({
+                const { content, finishReason } = await runToolLoop({
                     model: modelConfig.mistralModel,
                     messages: fullMessages,
+                    tools: webAccess ? TOOLS : undefined,
                     temperature,
-                    maxTokens: max_tokens,
-                    onDelta: (delta) => sendChunk({ content: delta })
+                    maxTokens: max_tokens
                 });
+
+                await simulateStream(content, (chunk) => sendChunk({ content: chunk }));
+
                 sendChunk({}, finishReason);
                 res.write("data: [DONE]\n\n");
                 res.end();
@@ -107,9 +108,10 @@ router.post("/chat/completions", async (req, res) => {
             return;
         }
 
-        const { content, finishReason, usage } = await completeMistralChat({
+        const { content, finishReason, usage } = await runToolLoop({
             model: modelConfig.mistralModel,
             messages: fullMessages,
+            tools: webAccess ? TOOLS : undefined,
             temperature,
             maxTokens: max_tokens
         });
