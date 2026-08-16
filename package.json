@@ -1,0 +1,17 @@
+{
+  "name": "sonicgpt-api",
+  "version": "1.0.0",
+  "description": "API SonicGPT — backend IA conversationnelle propulsé par Mistral AI",
+  "main": "api/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node local-server.js",
+    "start": "node local-server.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
