@@ -91,4 +91,31 @@ async function streamMistralChat({ model, messages, temperature = 0.7, maxTokens
     return { content: fullText, finishReason };
 }
 
-module.exports = { completeMistralChat, streamMistralChat };
+async function callMistralOnce({ model, messages, tools, temperature = 0.7, maxTokens = 1024 }) {
+    const body = { model, messages, temperature, max_tokens: maxTokens, stream: false };
+    if (tools && tools.length) {
+        body.tools = tools;
+        body.tool_choice = "auto";
+    }
+
+    const response = await fetch(MISTRAL_API_URL, {
+        method: "POST",
+        headers: buildHeaders(),
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        throw new Error(`Mistral API error ${response.status}: ${errText}`);
+    }
+
+    const json = await response.json();
+    const choice = json.choices?.[0];
+    return {
+        message: choice?.message || {},
+        finishReason: choice?.finish_reason || "stop",
+        usage: json.usage || null
+    };
+}
+
+module.exports = { completeMistralChat, streamMistralChat, callMistralOnce };
