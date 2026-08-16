@@ -1,16 +1,19 @@
-# SonicGPT API
+
+---
+
+SonicGPT API
 
 Backend d'IA conversationnelle, propulsé par Mistral AI, avec une interface propre
 (format proche d'OpenAI) pour que n'importe quel client (site web, app mobile, bot) puisse
 discuter avec "SonicGPT" — streaming des réponses inclus, comme ChatGPT ou Claude.
 
-## Stack
+Stack
 
-- **Node.js + Express**
-- **Turso (libSQL)** — persistance des conversations, compatible serverless/Vercel
-- **Mistral AI** comme moteur, appelé côté serveur uniquement (ta clé Mistral n'est jamais exposée)
+· Node.js + Express
+· Turso (libSQL) — persistance des conversations, compatible serverless/Vercel
+· Mistral AI comme moteur, appelé côté serveur uniquement (ta clé Mistral n'est jamais exposée)
 
-## 1. Créer la base Turso
+1. Créer la base Turso
 
 ```bash
 curl -sSfL https://get.tur.so/install.sh | bash
@@ -20,18 +23,20 @@ turso db show sonicgpt --url        # -> TURSO_DATABASE_URL
 turso db tokens create sonicgpt     # -> TURSO_AUTH_TOKEN
 ```
 
-Le schéma (`conversations`, `messages`) se crée automatiquement au premier appel.
+Le schéma (conversations, messages) se crée automatiquement au premier appel.
 
-## 2. Configuration
+2. Configuration
 
 ```bash
 cp .env.example .env
 ```
 
-Remplis dans `.env` :
-- `MISTRAL_API_KEY` — ta clé prise sur [console.mistral.ai](https://console.mistral.ai/api-keys)
-- `SONICGPT_API_KEY` — une clé que **tu inventes toi-même** (longue chaîne aléatoire), c'est celle que tes utilisateurs/clients utiliseront pour appeler ton API. Génère-en une avec `openssl rand -hex 32`.
-- `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`
+Remplis dans .env :
+
+· MISTRAL_API_KEY — ta clé prise sur console.mistral.ai
+· SONICGPT_API_KEY — une clé que tu inventes toi-même (longue chaîne aléatoire), c'est celle que tes utilisateurs/clients utiliseront pour appeler ton API. Génère-en une avec openssl rand -hex 32.
+· TURSO_DATABASE_URL / TURSO_AUTH_TOKEN
+· TAVILY_API_KEY — crée un compte gratuit sur app.tavily.com, copie la clé depuis le dashboard (1000 requêtes/mois gratuites, sans carte bancaire). Sans cette clé, l'IA répond uniquement de mémoire et ignore les demandes de recherche web.
 
 ```bash
 npm install
@@ -39,7 +44,7 @@ npm run dev
 # -> http://localhost:3000
 ```
 
-## 3. Déploiement sur Vercel
+3. Déploiement sur Vercel
 
 ```bash
 npm i -g vercel
@@ -52,27 +57,26 @@ Ajoute les mêmes variables d'environnement dans Settings → Environment Variab
 vercel --prod
 ```
 
-## Authentification
+Authentification
 
-Toutes les routes `/v1/*` demandent ta clé `SONICGPT_API_KEY` :
+Toutes les routes /v1/* demandent ta clé SONICGPT_API_KEY :
 
 ```
 Authorization: Bearer ta-cle-sonicgpt
 ```
 
-(ou header `x-api-key` en alternative)
+(ou header x-api-key en alternative)
 
-## Modèles disponibles
+Modèles disponibles
 
-| Nom public | Modèle Mistral sous-jacent | Usage |
-|---|---|---|
-| `sonicgpt-1` | `mistral-large-latest` | Le plus performant |
-| `sonicgpt-1-mini` | `mistral-small-latest` | Rapide, économique |
-| `sonicgpt-1-code` | `codestral-latest` | Génération de code |
+Nom public Modèle Mistral sous-jacent Usage
+sonicgpt-1 mistral-large-latest Le plus performant
+sonicgpt-1-mini mistral-small-latest Rapide, économique
+sonicgpt-1-code codestral-latest Génération de code
 
-`GET /v1/models` renvoie cette liste au format JSON.
+GET /v1/models renvoie cette liste au format JSON.
 
-## Route A — Compatible OpenAI (stateless)
+Route A — Compatible OpenAI (stateless)
 
 Pour un usage classique façon ChatGPT/Claude API : le client garde l'historique et le renvoie à chaque appel.
 
@@ -87,9 +91,9 @@ curl https://ton-projet.vercel.app/v1/chat/completions \
   }'
 ```
 
-Avec `"stream": true`, la réponse est envoyée en Server-Sent Events (SSE), morceau par morceau, format identique à celui d'OpenAI (`data: {...}\n\n`, terminé par `data: [DONE]\n\n`).
+Avec "stream": true, la réponse est envoyée en Server-Sent Events (SSE), morceau par morceau, format identique à celui d'OpenAI (data: {...}\n\n, terminé par data: [DONE]\n\n).
 
-## Route B — Conversations persistées (recommandé pour une vraie app de chat)
+Route B — Conversations persistées (recommandé pour une vraie app de chat)
 
 ```bash
 # 1. Créer une conversation
@@ -120,16 +124,25 @@ curl -X DELETE https://ton-projet.vercel.app/v1/conversations/uuid-... \
 
 Le serveur charge automatiquement tout l'historique de la conversation avant chaque appel à Mistral — le client n'a jamais besoin de renvoyer les messages précédents. Le titre de la conversation se déduit automatiquement du premier message.
 
-## Format du flux SSE (route conversations)
+Accès web (recherche + lecture de pages)
+
+L'IA peut désormais chercher des informations à jour et lire des pages web avant de répondre, via Tavily. Activé par défaut sur toutes les routes ; désactivable par requête avec "webAccess": false dans le body (réponse plus rapide, mais uniquement à partir des connaissances internes du modèle).
+
+Ce n'est pas une "connexion permanente à l'actualité" comme un fil RSS : à chaque question qui le justifie, le modèle décide lui-même de déclencher une recherche, lit les résultats renvoyés par Tavily, et rédige sa réponse à partir de ça — exactement comme un internaute qui chercherait sur Google puis lirait quelques pages, mais fait automatiquement.
+
+Format du flux SSE (route conversations)
 
 ```
-data: {"delta": "Bon", "done": false}
-data: {"delta": "jour", "done": false}
-data: {"delta": " !", "done": false}
-data: {"delta": "", "done": true, "finishReason": "stop"}
+data: {"type": "tool_call", "tool": "web_search", "input": {"query": "..."}, "done": false}
+data: {"type": "delta", "delta": "Bon", "done": false}
+data: {"type": "delta", "delta": "jour", "done": false}
+data: {"type": "delta", "delta": " !", "done": false}
+data: {"type": "done", "done": true, "finishReason": "stop"}
 ```
 
-## Exemple client JavaScript (streaming côté front)
+L'événement tool_call n'apparaît que si le modèle a effectivement déclenché une recherche ou une lecture de page — utile pour afficher un indicateur "🔎 Recherche en cours..." côté client. Note : les morceaux de texte (delta) sont désormais envoyés une fois la réponse complète générée (la boucle de recherche doit se terminer avant de pouvoir répondre), puis rejoués progressivement pour garder une sensation de flux fluide côté utilisateur — ce n'est plus un vrai streaming token-par-token comme avant l'ajout de l'accès web.
+
+Exemple client JavaScript (streaming côté front)
 
 ```js
 const res = await fetch("https://ton-projet.vercel.app/v1/conversations/ID/messages", {
@@ -154,14 +167,15 @@ while (true) {
     for (const line of lines) {
         if (!line.startsWith("data: ")) continue;
         const json = JSON.parse(line.slice(6));
-        if (json.delta) process.stdout.write(json.delta); // ou mise à jour de l'UI
+        if (json.type === "tool_call") console.log(`Recherche : ${json.input.query || json.input.url}`);
+        if (json.type === "delta") process.stdout.write(json.delta);
     }
 }
 ```
 
-## Sécurité et limites à considérer
+Sécurité et limites à considérer
 
-- **Ne mets jamais `MISTRAL_API_KEY` dans du code exécuté côté client** — elle doit rester uniquement dans les variables d'environnement du serveur. C'est déjà comme ça dans ce projet.
-- **Rate limiting** : ajoute `express-rate-limit` par `ownerId`/IP avant une mise en prod publique, pour éviter qu'un utilisateur épuise ton crédit Mistral.
-- **Coûts** : chaque appel consomme des tokens sur ta clé Mistral. Surveille ta consommation sur le dashboard Mistral, et envisage de fixer un `max_tokens` raisonnable par défaut (déjà à 1024 ici).
-- **Modération** : si l'app est ouverte au public, pense à filtrer les contenus abusifs avant de les persister/renvoyer.
+· Ne mets jamais MISTRAL_API_KEY dans du code exécuté côté client — elle doit rester uniquement dans les variables d'environnement du serveur. C'est déjà comme ça dans ce projet.
+· Rate limiting : ajoute express-rate-limit par ownerId/IP avant une mise en prod publique, pour éviter qu'un utilisateur épuise ton crédit Mistral.
+· Coûts : chaque appel consomme des tokens sur ta clé Mistral. Surveille ta consommation sur le dashboard Mistral, et envisage de fixer un max_tokens raisonnable par défaut (déjà à 1024 ici).
+· Modération : si l'app est ouverte au public, pense à filtrer les contenus abusifs avant de les persister/renvoyer.
