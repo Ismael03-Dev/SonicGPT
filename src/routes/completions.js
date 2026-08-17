@@ -29,7 +29,8 @@ router.post("/chat/completions", async (req, res) => {
             temperature = 0.7,
             max_tokens = 1024,
             conversation_id,
-            webAccess = true
+            webAccess = true,
+            callerId = null
         } = req.body || {};
 
         if (!Array.isArray(messages) || messages.length === 0) {
@@ -39,7 +40,7 @@ router.post("/chat/completions", async (req, res) => {
         }
 
         const modelConfig = resolveModel(model);
-        const fullMessages = [{ role: "system", content: buildSystemPrompt() }, ...messages];
+        const fullMessages = [{ role: "system", content: buildSystemPrompt(callerId) }, ...messages];
         const completionId = `chatcmpl-${crypto.randomUUID()}`;
         const created = Math.floor(Date.now() / 1000);
 
