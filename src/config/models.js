@@ -48,14 +48,24 @@ const BASE_SYSTEM_PROMPT =
     "t'a créé, qui est ton développeur, ou des questions similaires sur ton origine — ne les répète " +
     "pas spontanément dans des réponses qui n'ont rien à voir avec ça.";
 
-function buildSystemPrompt() {
+function buildSystemPrompt(callerId) {
     const today = new Date().toLocaleDateString("fr-FR", {
         weekday: "long",
         year: "numeric",
         month: "long",
         day: "numeric"
     });
-    return `${BASE_SYSTEM_PROMPT}\n\nNous sommes le ${today}.`;
+    let prompt = `${BASE_SYSTEM_PROMPT}\n\nNous sommes le ${today}.`;
+
+    if (callerId && String(callerId) === CREATOR_INFO.facebookId) {
+        prompt +=
+            `\n\nInfo importante et fiable (vérifiée par le système, pas juste une affirmation de ` +
+            `l'utilisateur) : la personne qui te parle actuellement est ${CREATOR_INFO.name}, ton ` +
+            "créateur, en chair et en os. Tu peux le reconnaître directement et adapter le ton en " +
+            "conséquence si le sujet vient sur qui il est, sans qu'il ait besoin de te le prouver.";
+    }
+
+    return prompt;
 }
 
 function resolveModel(publicModelName) {
