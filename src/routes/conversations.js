@@ -104,7 +104,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
             content,
             stream = true,
             temperature = 0.7,
-            max_tokens = 1024,
+            max_tokens = 400,
             webAccess = true
         } = req.body || {};
 
@@ -118,6 +118,16 @@ router.post("/conversations/:id/messages", async (req, res) => {
         });
         const conversation = convResult.rows[0];
         if (!conversation) return res.status(404).json({ error: { message: "Conversation introuvable." } });
+
+        const IDLE_RESET_MS = 30 * 1000;
+        const lastActivity = new Date(conversation.updated_at.replace(" ", "T") + "Z").getTime();
+        const idleMs = Date.now() - lastActivity;
+        if (idleMs > IDLE_RESET_MS) {
+            await db.execute({
+                sql: "DELETE FROM messages WHERE conversation_id = ?",
+                args: [req.params.id]
+            });
+        }
 
         const historyResult = await db.execute({
             sql: "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id ASC",
