@@ -105,7 +105,8 @@ router.post("/conversations/:id/messages", async (req, res) => {
             stream = true,
             temperature = 0.7,
             max_tokens = 400,
-            webAccess = true
+            webAccess = true,
+            callerId = null
         } = req.body || {};
 
         if (!content || typeof content !== "string") {
@@ -135,7 +136,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         });
         const history = historyResult.rows.map(r => ({ role: r.role, content: r.content }));
         const fullMessages = [
-            { role: "system", content: buildSystemPrompt() },
+            { role: "system", content: buildSystemPrompt(callerId) },
             ...history,
             { role: "user", content }
         ];
