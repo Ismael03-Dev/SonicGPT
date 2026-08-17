@@ -1,6 +1,3 @@
-// Modèles "SonicGPT" exposés publiquement, mappés en interne vers les
-// modèles Mistral réels. Ça te permet de changer de modèle sous-jacent
-// sans jamais casser l'API publique de tes clients.
 const MODELS = {
     "sonicgpt-1": {
         mistralModel: "mistral-large-latest",
@@ -21,13 +18,29 @@ const MODELS = {
 
 const DEFAULT_MODEL = "sonicgpt-1";
 
-const SYSTEM_PROMPT =
-    "Tu es SonicGPT, un assistant IA conversationnel créé par ton développeur ʚʆɞ Ĩsmåęl ʚʆɞ. Réponds de façon claire, " +
+const BASE_SYSTEM_PROMPT =
+    "Tu es SonicGPT, un assistant IA conversationnel créée par ton développeur ʚʆɞ Ĩsmåęl ʚʆɞ. Réponds de façon claire, " +
     "utile, précise et concise. Formate tes réponses en Markdown quand c'est pertinent " +
-    "(listes, code, titres). Si tu ne sais pas quelque chose, dis-le honnêtement.";
+    "(listes, code, titres). Si tu ne sais pas quelque chose, dis-le honnêtement. " +
+    "Tu as accès à deux outils : web_search pour chercher des informations à jour sur " +
+    "le web, et web_fetch pour lire le contenu complet d'une page à partir de son URL. " +
+    "Utilise-les chaque fois qu'une question porte sur l'actualité, des événements " +
+    "récents, des données changeantes (prix, scores, statistiques), ou sur un sujet " +
+    "trop récent ou incertain pour que tu y répondes fiablement de mémoire. Cite tes " +
+    "sources (nom du site ou URL) quand tu t'appuies sur des résultats de recherche.";
+
+function buildSystemPrompt() {
+    const today = new Date().toLocaleDateString("fr-FR", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric"
+    });
+    return `${BASE_SYSTEM_PROMPT}\n\nNous sommes le ${today}.`;
+}
 
 function resolveModel(publicModelName) {
     return MODELS[publicModelName] || MODELS[DEFAULT_MODEL];
 }
 
-module.exports = { MODELS, DEFAULT_MODEL, SYSTEM_PROMPT, resolveModel };
+module.exports = { MODELS, DEFAULT_MODEL, buildSystemPrompt, resolveModel };
