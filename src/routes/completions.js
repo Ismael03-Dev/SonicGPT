@@ -30,7 +30,7 @@ router.post("/chat/completions", async (req, res) => {
             max_tokens = 1024,
             conversation_id,
             webAccess = true,
-            callerId = null
+            callerId
         } = req.body || {};
 
         if (!Array.isArray(messages) || messages.length === 0) {
@@ -109,12 +109,18 @@ router.post("/chat/completions", async (req, res) => {
             return;
         }
 
+        const mediaResults = [];
         const { content, finishReason, usage } = await runToolLoop({
             model: modelConfig.mistralModel,
             messages: fullMessages,
             tools: webAccess ? TOOLS : undefined,
             temperature,
-            maxTokens: max_tokens
+            maxTokens: max_tokens,
+            onToolResult: ({ name, result }) => {
+                if ((name === "generate_image" || name === "generate_voice") && result && result.url) {
+                    mediaResults.push({ tool: name, mediaType: result.type, url: result.url });
+                }
+            }
         });
 
         await persist(content);
@@ -131,6 +137,7 @@ router.post("/chat/completions", async (req, res) => {
                     finish_reason: finishReason
                 }
             ],
+            media: mediaResults,
             usage: usage
                 ? {
                       prompt_tokens: usage.prompt_tokens,
