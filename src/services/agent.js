@@ -3,7 +3,7 @@ const { executeTool } = require("../config/tools");
 
 const MAX_TOOL_STEPS = 4;
 
-async function runToolLoop({ model, messages, tools, temperature, maxTokens, onToolCall }) {
+async function runToolLoop({ model, messages, tools, temperature, maxTokens, onToolCall, onToolResult }) {
     let workingMessages = [...messages];
 
     for (let step = 0; step < MAX_TOOL_STEPS; step++) {
@@ -37,6 +37,10 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
                 }
 
                 const result = await executeTool(toolName, toolArgs);
+
+                if (onToolResult) {
+                    onToolResult({ name: toolName, result });
+                }
 
                 workingMessages.push({
                     role: "tool",
