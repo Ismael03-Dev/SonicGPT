@@ -106,7 +106,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
             temperature = 0.7,
             max_tokens = 400,
             webAccess = true,
-            callerId = null
+            callerId
         } = req.body || {};
 
         if (!content || typeof content !== "string") {
@@ -185,6 +185,19 @@ router.post("/conversations/:id/messages", async (req, res) => {
                         res.write(
                             `data: ${JSON.stringify({ type: "tool_call", tool: name, input: args, done: false })}\n\n`
                         );
+                    },
+                    onToolResult: ({ name, result }) => {
+                        if ((name === "generate_image" || name === "generate_voice") && result && result.url) {
+                            res.write(
+                                `data: ${JSON.stringify({
+                                    type: "media",
+                                    tool: name,
+                                    mediaType: result.type,
+                                    url: result.url,
+                                    done: false
+                                })}\n\n`
+                            );
+                        }
                     }
                 });
 
@@ -203,17 +216,30 @@ router.post("/conversations/:id/messages", async (req, res) => {
             return;
         }
 
+        const mediaResults = [];
         const { content: assistantContent, finishReason, usage, toolsUsed } = await runToolLoop({
             model: modelConfig.mistralModel,
             messages: fullMessages,
             tools: webAccess ? TOOLS : undefined,
             temperature,
-            maxTokens: max_tokens
+            maxTokens: max_tokens,
+            onToolResult: ({ name, result }) => {
+                if ((name === "generate_image" || name === "generate_voice") && result && result.url) {
+                    mediaResults.push({ tool: name, mediaType: result.type, url: result.url });
+                }
+            }
         });
 
         await finalizeConversation(assistantContent);
 
-        res.json({ role: "assistant", content: assistantContent, finishReason, usage, toolsUsed });
+        res.json({
+            role: "assistant",
+            content: assistantContent,
+            finishReason,
+            usage,
+            toolsUsed,
+            media: mediaResults
+        });
     } catch (e) {
         console.error(e);
         res.status(500).json({ error: { message: "Erreur serveur." } });
