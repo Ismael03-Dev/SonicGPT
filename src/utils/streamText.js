@@ -11,6 +11,7 @@ function chunkText(text, wordsPerChunk = 6) {
 }
 
 async function simulateStream(text, onChunk, delayMs = 35) {
+    if (!text) return;
     const chunks = chunkText(text);
     for (const chunk of chunks) {
         onChunk(chunk);
