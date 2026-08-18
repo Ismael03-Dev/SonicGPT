@@ -10,7 +10,6 @@ function buildHeaders() {
     };
 }
 
-// Appel non-streaming : renvoie le texte complet + les infos d'usage.
 async function completeMistralChat({ model, messages, temperature = 0.7, maxTokens = 1024 }) {
     const response = await fetch(MISTRAL_API_URL, {
         method: "POST",
@@ -37,8 +36,6 @@ async function completeMistralChat({ model, messages, temperature = 0.7, maxToke
     };
 }
 
-// Appel streaming : appelle onDelta(chunkText) à chaque morceau reçu.
-// Renvoie le texte complet accumulé une fois le flux terminé.
 async function streamMistralChat({ model, messages, temperature = 0.7, maxTokens = 1024, onDelta }) {
     const response = await fetch(MISTRAL_API_URL, {
         method: "POST",
@@ -65,7 +62,7 @@ async function streamMistralChat({ model, messages, temperature = 0.7, maxTokens
     for await (const chunk of response.body) {
         buffer += decoder.decode(chunk, { stream: true });
         const parts = buffer.split("\n\n");
-        buffer = parts.pop(); // dernier morceau potentiellement incomplet, gardé pour le prochain tour
+        buffer = parts.pop();
 
         for (const part of parts) {
             const line = part.trim();
@@ -83,7 +80,7 @@ async function streamMistralChat({ model, messages, temperature = 0.7, maxTokens
                     onDelta(delta);
                 }
             } catch (e) {
-                // morceau JSON malformé/partiel, on l'ignore silencieusement
+                // ignore
             }
         }
     }
