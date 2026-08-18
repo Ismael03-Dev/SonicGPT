@@ -1,6 +1,3 @@
-// Authentifie les appelants de l'API SonicGPT (tes propres utilisateurs/clients).
-// À ne pas confondre avec MISTRAL_API_KEY, qui reste côté serveur et n'est
-// jamais transmise ni visible du client.
 function auth(req, res, next) {
     const header = req.headers.authorization || "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : req.headers["x-api-key"];
