@@ -5,6 +5,7 @@ const cors = require("cors");
 const auth = require("./middleware/auth");
 const completionsRoutes = require("./routes/completions");
 const conversationsRoutes = require("./routes/conversations");
+const mediaRoutes = require("./routes/media");
 
 const app = express();
 
@@ -19,9 +20,9 @@ app.get("/", (req, res) => {
     });
 });
 
-// Toutes les routes /v1/* nécessitent la clé API SonicGPT
 app.use("/v1", auth, completionsRoutes);
 app.use("/v1", auth, conversationsRoutes);
+app.use("/v1", auth, mediaRoutes);
 
 app.use((req, res) => {
     res.status(404).json({ error: { message: "Route introuvable." } });
