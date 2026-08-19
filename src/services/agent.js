@@ -3,8 +3,9 @@ const { executeTool } = require("../config/tools");
 
 const MAX_TOOL_STEPS = 4;
 
-async function runToolLoop({ model, messages, tools, temperature, maxTokens, onToolCall, onToolResult }) {
+async function runToolLoop({ model, messages, tools, temperature, maxTokens, onToolCall, onToolResult, toolContext = {} }) {
     let workingMessages = [...messages];
+    const context = { ...toolContext };
 
     for (let step = 0; step < MAX_TOOL_STEPS; step++) {
         const { message, finishReason, usage } = await callMistralOnce({
@@ -36,7 +37,11 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
                     onToolCall({ name: toolName, args: parsedArgs });
                 }
 
-                const result = await executeTool(toolName, toolArgs);
+                const result = await executeTool(toolName, toolArgs, context);
+
+                if ((toolName === "generate_image" || toolName === "edit_image") && result && result.url) {
+                    context.lastImageUrl = result.url;
+                }
 
                 if (onToolResult) {
                     onToolResult({ name: toolName, result });
@@ -56,7 +61,8 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
             content: message.content || "",
             finishReason,
             usage,
-            toolsUsed: step > 0
+            toolsUsed: step > 0,
+            lastImageUrl: context.lastImageUrl || toolContext.lastImageUrl || null
         };
     }
 
@@ -64,7 +70,8 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
         content: "Je n'ai pas réussi à obtenir une réponse claire après plusieurs recherches. Peux-tu reformuler ta question ?",
         finishReason: "length",
         usage: null,
-        toolsUsed: true
+        toolsUsed: true,
+        lastImageUrl: context.lastImageUrl || toolContext.lastImageUrl || null
     };
 }
 
