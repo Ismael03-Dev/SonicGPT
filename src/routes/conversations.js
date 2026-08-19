@@ -123,17 +123,19 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const IDLE_RESET_MS = 30 * 1000;
         const lastActivity = new Date(conversation.updated_at.replace(" ", "T") + "Z").getTime();
         const idleMs = Date.now() - lastActivity;
-        let lastImageUrl = conversation.last_image_url || null;
+        let lastImageBase64 = conversation.last_image_base64 || null;
+        let lastImageMimeType = conversation.last_image_mime || null;
         if (idleMs > IDLE_RESET_MS) {
             await db.execute({
                 sql: "DELETE FROM messages WHERE conversation_id = ?",
                 args: [req.params.id]
             });
             await db.execute({
-                sql: "UPDATE conversations SET last_image_url = NULL WHERE id = ?",
+                sql: "UPDATE conversations SET last_image_base64 = NULL, last_image_mime = NULL WHERE id = ?",
                 args: [req.params.id]
             });
-            lastImageUrl = null;
+            lastImageBase64 = null;
+            lastImageMimeType = null;
         }
 
         const historyResult = await db.execute({
@@ -156,16 +158,16 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
         const modelConfig = resolveModel(conversation.model);
 
-        const finalizeConversation = async (assistantContent, newLastImageUrl) => {
+        const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType) => {
             const updates = ["updated_at = datetime('now')"];
             const args = [];
             if (isFirstMessage) {
                 updates.push("title = ?");
                 args.push(makeTitle(content));
             }
-            if (newLastImageUrl) {
-                updates.push("last_image_url = ?");
-                args.push(newLastImageUrl);
+            if (newLastImageBase64) {
+                updates.push("last_image_base64 = ?", "last_image_mime = ?");
+                args.push(newLastImageBase64, newLastImageMimeType || "image/png");
             }
             args.push(req.params.id);
             await db.execute({
@@ -185,26 +187,32 @@ router.post("/conversations/:id/messages", async (req, res) => {
             res.flushHeaders();
 
             try {
-                const { content: assistantContent, finishReason, lastImageUrl: newLastImageUrl } = await runToolLoop({
+                const {
+                    content: assistantContent,
+                    finishReason,
+                    lastImageBase64: newLastImageBase64,
+                    lastImageMimeType: newLastImageMimeType
+                } = await runToolLoop({
                     model: modelConfig.mistralModel,
                     messages: fullMessages,
                     tools: webAccess ? TOOLS : undefined,
                     temperature,
                     maxTokens: max_tokens,
-                    toolContext: { lastImageUrl },
+                    toolContext: { lastImageBase64, lastImageMimeType },
                     onToolCall: ({ name, args }) => {
                         res.write(
                             `data: ${JSON.stringify({ type: "tool_call", tool: name, input: args, done: false })}\n\n`
                         );
                     },
                     onToolResult: ({ name, result }) => {
-                        if ((name === "generate_image" || name === "generate_voice" || name === "edit_image") && result && result.url) {
+                        if ((name === "generate_image" || name === "generate_voice" || name === "edit_image") && result && result.base64) {
                             res.write(
                                 `data: ${JSON.stringify({
                                     type: "media",
                                     tool: name,
                                     mediaType: result.type,
-                                    url: result.url,
+                                    base64: result.base64,
+                                    mimeType: result.mimeType,
                                     done: false
                                 })}\n\n`
                             );
@@ -218,7 +226,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
                 res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason })}\n\n`);
                 res.end();
-                await finalizeConversation(assistantContent, newLastImageUrl);
+                await finalizeConversation(assistantContent, newLastImageBase64, newLastImageMimeType);
             } catch (e) {
                 console.error(e);
                 res.write(`data: ${JSON.stringify({ type: "error", error: "Erreur du modèle.", done: true })}\n\n`);
@@ -228,21 +236,28 @@ router.post("/conversations/:id/messages", async (req, res) => {
         }
 
         const mediaResults = [];
-        const { content: assistantContent, finishReason, usage, toolsUsed, lastImageUrl: newLastImageUrl } = await runToolLoop({
+        const {
+            content: assistantContent,
+            finishReason,
+            usage,
+            toolsUsed,
+            lastImageBase64: newLastImageBase64,
+            lastImageMimeType: newLastImageMimeType
+        } = await runToolLoop({
             model: modelConfig.mistralModel,
             messages: fullMessages,
             tools: webAccess ? TOOLS : undefined,
             temperature,
             maxTokens: max_tokens,
-            toolContext: { lastImageUrl },
+            toolContext: { lastImageBase64, lastImageMimeType },
             onToolResult: ({ name, result }) => {
-                if ((name === "generate_image" || name === "generate_voice" || name === "edit_image") && result && result.url) {
-                    mediaResults.push({ tool: name, mediaType: result.type, url: result.url });
+                if ((name === "generate_image" || name === "generate_voice" || name === "edit_image") && result && result.base64) {
+                    mediaResults.push({ tool: name, mediaType: result.type, base64: result.base64, mimeType: result.mimeType });
                 }
             }
         });
 
-        await finalizeConversation(assistantContent, newLastImageUrl);
+        await finalizeConversation(assistantContent, newLastImageBase64, newLastImageMimeType);
 
         res.json({
             role: "assistant",
