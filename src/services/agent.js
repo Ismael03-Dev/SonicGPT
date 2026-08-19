@@ -39,19 +39,24 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
 
                 const result = await executeTool(toolName, toolArgs, context);
 
-                if ((toolName === "generate_image" || toolName === "edit_image") && result && result.url) {
-                    context.lastImageUrl = result.url;
+                if ((toolName === "generate_image" || toolName === "edit_image") && result && result.base64) {
+                    context.lastImageBase64 = result.base64;
+                    context.lastImageMimeType = result.mimeType;
                 }
 
                 if (onToolResult) {
                     onToolResult({ name: toolName, result });
                 }
 
+                const modelFacingResult = result.base64
+                    ? { success: true, type: result.type, note: "Média généré et envoyé automatiquement à l'utilisateur." }
+                    : result;
+
                 workingMessages.push({
                     role: "tool",
                     tool_call_id: toolCall.id,
                     name: toolName,
-                    content: JSON.stringify(result)
+                    content: JSON.stringify(modelFacingResult)
                 });
             }
             continue;
@@ -62,7 +67,8 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
             finishReason,
             usage,
             toolsUsed: step > 0,
-            lastImageUrl: context.lastImageUrl || toolContext.lastImageUrl || null
+            lastImageBase64: context.lastImageBase64 || toolContext.lastImageBase64 || null,
+            lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null
         };
     }
 
@@ -71,7 +77,8 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
         finishReason: "length",
         usage: null,
         toolsUsed: true,
-        lastImageUrl: context.lastImageUrl || toolContext.lastImageUrl || null
+        lastImageBase64: context.lastImageBase64 || toolContext.lastImageBase64 || null,
+        lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null
     };
 }
 
