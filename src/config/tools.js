@@ -1,5 +1,6 @@
 const { tavilySearch, tavilyExtract } = require("../services/tavily");
 const { buildImageUrl, buildAudioUrl } = require("../services/pollinations");
+const { editImage } = require("../services/imageEdit");
 
 const TOOLS = [
     {
@@ -83,10 +84,36 @@ const TOOLS = [
                 required: ["text"]
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "edit_image",
+            description:
+                "Modifie une image existante à partir d'une consigne texte (par exemple : ajoute un " +
+                "chapeau, change le fond, rends-la en style peinture...). Si aucune URL n'est fournie, " +
+                "modifie automatiquement la dernière image générée dans cette conversation. Utilise cet " +
+                "outil quand on te demande de modifier, retoucher, éditer ou changer une image déjà " +
+                "montrée.",
+            parameters: {
+                type: "object",
+                properties: {
+                    instruction: {
+                        type: "string",
+                        description: "Description de la modification à apporter à l'image."
+                    },
+                    imageUrl: {
+                        type: "string",
+                        description: "URL de l'image à modifier. Omets ce champ pour éditer la dernière image générée dans la conversation."
+                    }
+                },
+                required: ["instruction"]
+            }
+        }
     }
 ];
 
-async function executeTool(name, rawArgs) {
+async function executeTool(name, rawArgs, context = {}) {
     let args = {};
     try {
         args = JSON.parse(rawArgs || "{}");
@@ -112,6 +139,15 @@ async function executeTool(name, rawArgs) {
             if (!args.text) return { error: "Le paramètre 'text' est requis." };
             const url = buildAudioUrl({ text: args.text, voice: args.voice });
             return { type: "audio", url, text: args.text };
+        }
+        if (name === "edit_image") {
+            if (!args.instruction) return { error: "Le paramètre 'instruction' est requis." };
+            const targetUrl = args.imageUrl || context.lastImageUrl;
+            if (!targetUrl) {
+                return { error: "Aucune image récente à modifier. Génère d'abord une image, ou donne une URL." };
+            }
+            const result = await editImage({ imageUrl: targetUrl, instruction: args.instruction });
+            return { type: "image", url: result.url, prompt: args.instruction };
         }
         return { error: `Outil inconnu : ${name}` };
     } catch (e) {
