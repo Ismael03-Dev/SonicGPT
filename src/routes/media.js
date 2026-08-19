@@ -1,11 +1,11 @@
 const express = require("express");
 const { db, ensureSchema } = require("../db");
-const { buildImageUrl, buildAudioUrl } = require("../services/pollinations");
-const { editImage } = require("../services/imageEdit");
+const { generateImage, editImage } = require("../services/gemini");
+const { generateVoice } = require("../services/voicerss");
 
 const router = express.Router();
 
-async function updateLastImageForOwner(ownerId, url) {
+async function updateLastImageForOwner(ownerId, base64, mimeType) {
     if (!ownerId) return;
     try {
         await ensureSchema();
@@ -16,73 +16,86 @@ async function updateLastImageForOwner(ownerId, url) {
         const conversation = result.rows[0];
         if (conversation) {
             await db.execute({
-                sql: "UPDATE conversations SET last_image_url = ? WHERE id = ?",
-                args: [url, conversation.id]
+                sql: "UPDATE conversations SET last_image_base64 = ?, last_image_mime = ? WHERE id = ?",
+                args: [base64, mimeType, conversation.id]
             });
         }
     } catch (e) {
-        console.error("[media] Impossible de mettre à jour last_image_url :", e.message);
+        console.error("[media] Impossible de mettre à jour last_image_base64 :", e.message);
     }
 }
 
 router.post("/images/generations", async (req, res) => {
     try {
-        const { prompt, width, height, model, ownerId } = req.body || {};
+        const { prompt, ownerId } = req.body || {};
         if (!prompt || typeof prompt !== "string") {
             return res.status(400).json({ error: { message: "Le champ 'prompt' (string) est requis." } });
         }
-        const url = buildImageUrl({ prompt, width, height, model });
-        await updateLastImageForOwner(ownerId, url);
-        res.json({ url, prompt });
+        const result = await generateImage({ prompt });
+        await updateLastImageForOwner(ownerId, result.base64, result.mimeType);
+        res.json({ base64: result.base64, mimeType: result.mimeType, prompt });
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: { message: "Erreur serveur." } });
+        if (e.message === "GEMINI_KEY_MISSING") {
+            return res.status(500).json({ error: { message: "GEMINI_API_KEY non configurée côté serveur." } });
+        }
+        res.status(500).json({ error: { message: "Erreur serveur.", details: e.message } });
     }
 });
 
 router.post("/images/edit", async (req, res) => {
     try {
-        const { instruction, imageUrl, ownerId } = req.body || {};
+        const { instruction, ownerId } = req.body || {};
         if (!instruction || typeof instruction !== "string") {
             return res.status(400).json({ error: { message: "Le champ 'instruction' (string) est requis." } });
         }
-
-        let targetUrl = imageUrl || null;
-        if (!targetUrl && ownerId) {
-            await ensureSchema();
-            const result = await db.execute({
-                sql: "SELECT last_image_url FROM conversations WHERE owner_id = ? ORDER BY updated_at DESC LIMIT 1",
-                args: [ownerId]
-            });
-            targetUrl = result.rows[0]?.last_image_url || null;
+        if (!ownerId) {
+            return res.status(400).json({ error: { message: "Le champ 'ownerId' est requis." } });
         }
 
-        if (!targetUrl) {
+        await ensureSchema();
+        const result = await db.execute({
+            sql: "SELECT last_image_base64, last_image_mime FROM conversations WHERE owner_id = ? ORDER BY updated_at DESC LIMIT 1",
+            args: [ownerId]
+        });
+        const stored = result.rows[0];
+
+        if (!stored || !stored.last_image_base64) {
             return res.status(400).json({
-                error: { message: "Aucune image récente à modifier. Fournis 'imageUrl' ou génère d'abord une image." }
+                error: { message: "Aucune image récente à modifier. Génère d'abord une image." }
             });
         }
 
-        const result = await editImage({ imageUrl: targetUrl, instruction });
-        await updateLastImageForOwner(ownerId, result.url);
-        res.json({ url: result.url, instruction });
+        const edited = await editImage({
+            base64: stored.last_image_base64,
+            mimeType: stored.last_image_mime,
+            instruction
+        });
+        await updateLastImageForOwner(ownerId, edited.base64, edited.mimeType);
+        res.json({ base64: edited.base64, mimeType: edited.mimeType, instruction });
     } catch (e) {
         console.error(e);
+        if (e.message === "GEMINI_KEY_MISSING") {
+            return res.status(500).json({ error: { message: "GEMINI_API_KEY non configurée côté serveur." } });
+        }
         res.status(500).json({ error: { message: "Erreur serveur.", details: e.message } });
     }
 });
 
 router.post("/voice/generations", async (req, res) => {
     try {
-        const { text, voice } = req.body || {};
+        const { text } = req.body || {};
         if (!text || typeof text !== "string") {
             return res.status(400).json({ error: { message: "Le champ 'text' (string) est requis." } });
         }
-        const url = buildAudioUrl({ text, voice });
-        res.json({ url, text });
+        const result = await generateVoice({ text });
+        res.json({ base64: result.base64, mimeType: result.mimeType, text });
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: { message: "Erreur serveur." } });
+        if (e.message === "VOICERSS_KEY_MISSING") {
+            return res.status(500).json({ error: { message: "VOICERSS_API_KEY non configurée côté serveur." } });
+        }
+        res.status(500).json({ error: { message: "Erreur serveur.", details: e.message } });
     }
 });
 
