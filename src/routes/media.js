@@ -1,6 +1,6 @@
 const express = require("express");
 const { generateImage } = require("../services/cloudflare");
-const { generateVoice } = require("../services/voicerss");
+const { generateVoice } = require("../services/pollinationsVoice");
 
 const router = express.Router();
 
@@ -31,9 +31,6 @@ router.post("/voice/generations", async (req, res) => {
         res.json({ base64: result.base64, mimeType: result.mimeType, text });
     } catch (e) {
         console.error(e);
-        if (e.message === "VOICERSS_KEY_MISSING") {
-            return res.status(500).json({ error: { message: "VOICERSS_API_KEY non configurée côté serveur." } });
-        }
         res.status(500).json({ error: { message: "Erreur serveur.", details: e.message } });
     }
 });
