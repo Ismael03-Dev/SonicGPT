@@ -1,5 +1,5 @@
 const { tavilySearch, tavilyExtract } = require("../services/tavily");
-const { generateImage, editImage } = require("../services/gemini");
+const { generateImage } = require("../services/cloudflare");
 const { generateVoice } = require("../services/voicerss");
 
 const TOOLS = [
@@ -63,27 +63,6 @@ const TOOLS = [
     {
         type: "function",
         function: {
-            name: "edit_image",
-            description:
-                "Modifie la dernière image générée dans cette conversation à partir d'une consigne " +
-                "texte (par exemple : ajoute un chapeau, change le fond, rends-la en style peinture...). " +
-                "Utilise cet outil quand on te demande de modifier, retoucher, ou changer une image " +
-                "déjà montrée.",
-            parameters: {
-                type: "object",
-                properties: {
-                    instruction: {
-                        type: "string",
-                        description: "Description de la modification à apporter à l'image."
-                    }
-                },
-                required: ["instruction"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
             name: "generate_voice",
             description:
                 "Convertit du texte en message vocal audio et l'envoie à l'utilisateur. Utilise cet " +
@@ -103,7 +82,7 @@ const TOOLS = [
     }
 ];
 
-async function executeTool(name, rawArgs, context = {}) {
+async function executeTool(name, rawArgs) {
     let args = {};
     try {
         args = JSON.parse(rawArgs || "{}");
@@ -125,18 +104,6 @@ async function executeTool(name, rawArgs, context = {}) {
             const result = await generateImage({ prompt: args.prompt });
             return { type: "image", base64: result.base64, mimeType: result.mimeType, prompt: args.prompt };
         }
-        if (name === "edit_image") {
-            if (!args.instruction) return { error: "Le paramètre 'instruction' est requis." };
-            if (!context.lastImageBase64) {
-                return { error: "Aucune image récente à modifier. Génère d'abord une image." };
-            }
-            const result = await editImage({
-                base64: context.lastImageBase64,
-                mimeType: context.lastImageMimeType,
-                instruction: args.instruction
-            });
-            return { type: "image", base64: result.base64, mimeType: result.mimeType, prompt: args.instruction };
-        }
         if (name === "generate_voice") {
             if (!args.text) return { error: "Le paramètre 'text' est requis." };
             const result = await generateVoice({ text: args.text });
@@ -147,8 +114,8 @@ async function executeTool(name, rawArgs, context = {}) {
         if (e.message === "TAVILY_KEY_MISSING") {
             return { error: "La recherche web n'est pas configurée côté serveur (TAVILY_API_KEY manquant)." };
         }
-        if (e.message === "GEMINI_KEY_MISSING") {
-            return { error: "La génération d'image n'est pas configurée côté serveur (GEMINI_API_KEY manquant)." };
+        if (e.message === "CLOUDFLARE_KEY_MISSING") {
+            return { error: "La génération d'image n'est pas configurée côté serveur (CF_ACCOUNT_ID/CF_API_TOKEN manquant)." };
         }
         if (e.message === "VOICERSS_KEY_MISSING") {
             return { error: "La génération vocale n'est pas configurée côté serveur (VOICERSS_API_KEY manquant)." };
