@@ -1,6 +1,6 @@
 const { tavilySearch, tavilyExtract } = require("../services/tavily");
 const { generateImage } = require("../services/cloudflare");
-const { generateVoice } = require("../services/voicerss");
+const { generateVoice } = require("../services/pollinationsVoice");
 
 const TOOLS = [
     {
@@ -116,9 +116,6 @@ async function executeTool(name, rawArgs) {
         }
         if (e.message === "CLOUDFLARE_KEY_MISSING") {
             return { error: "La génération d'image n'est pas configurée côté serveur (CF_ACCOUNT_ID/CF_API_TOKEN manquant)." };
-        }
-        if (e.message === "VOICERSS_KEY_MISSING") {
-            return { error: "La génération vocale n'est pas configurée côté serveur (VOICERSS_API_KEY manquant)." };
         }
         return { error: `Échec de l'outil ${name} : ${e.message}` };
     }
