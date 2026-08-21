@@ -151,21 +151,29 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const modelConfig = resolveModel(conversation.model);
 
         const finalizeConversation = async (assistantContent) => {
-            const updates = ["updated_at = datetime('now')"];
-            const args = [];
-            if (isFirstMessage) {
-                updates.push("title = ?");
-                args.push(makeTitle(content));
+            try {
+                const updates = ["updated_at = datetime('now')"];
+                const args = [];
+                if (isFirstMessage) {
+                    updates.push("title = ?");
+                    args.push(makeTitle(content));
+                }
+                args.push(req.params.id);
+                await db.execute({
+                    sql: `UPDATE conversations SET ${updates.join(", ")} WHERE id = ?`,
+                    args
+                });
+                await db.execute({
+                    sql: "INSERT INTO messages (conversation_id, role, content) VALUES (?, 'assistant', ?)",
+                    args: [req.params.id, assistantContent]
+                });
+            } catch (e) {
+                if (e.message && e.message.includes("FOREIGN KEY")) {
+                    console.error(`[finalizeConversation] Conversation ${req.params.id} supprimée entre-temps, sauvegarde ignorée.`);
+                    return;
+                }
+                console.error("[finalizeConversation] Erreur inattendue :", e.message);
             }
-            args.push(req.params.id);
-            await db.execute({
-                sql: `UPDATE conversations SET ${updates.join(", ")} WHERE id = ?`,
-                args
-            });
-            await db.execute({
-                sql: "INSERT INTO messages (conversation_id, role, content) VALUES (?, 'assistant', ?)",
-                args: [req.params.id, assistantContent]
-            });
         };
 
         if (stream) {
