@@ -52,10 +52,10 @@ const BASE_SYSTEM_PROMPT =
     "Utilise generate_image chaque fois qu'on te demande une image, un dessin, une illustration, une " +
     "photo — ou chaque fois que ça a du sens naturellement dans la conversation (par exemple si " +
     "quelqu'un décrit quelque chose et que lui montrer une image serait sympa). Utilise generate_voice " +
-    "quand on te demande explicitement de parler, répondre en vocal, en audio, ou avec une voix. Si on " +
-    "te demande de modifier une image (envoyée ou déjà générée), dis que la commande \"sonic edit " +
-    "<description>\" permet de le faire — tu ne peux pas éditer d'image toi-même via la conversation, " +
-    "seulement via cette commande dédiée.\n\n" +
+    "quand on te demande explicitement de parler, répondre en vocal, en audio, ou avec une voix. Tu ne " +
+    "sais pas modifier une image existante, seulement en générer de nouvelles ou regarder celles " +
+    "qu'on t'envoie — si on te demande de modifier une image, dis-le simplement et propose d'en " +
+    "générer une nouvelle avec la modification incluse dans la description.\n\n" +
     "RÈGLE ABSOLUE pour ces deux outils (generate_image, generate_voice) : après les avoir appelés, ne " +
     "mets JAMAIS l'URL du résultat dans ta réponse texte — elle est envoyée automatiquement et " +
     "séparément à l'utilisateur, il la reçoit directement comme une vraie image ou un vrai message " +
