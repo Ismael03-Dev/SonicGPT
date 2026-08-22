@@ -141,7 +141,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const userMessageContent = imageUrl
             ? [
                   { type: "text", text: content || "Décris cette image." },
-                  { type: "image_url", image_url: imageUrl }
+                  { type: "image_url", image_url: { url: imageUrl } }
               ]
             : content;
 
