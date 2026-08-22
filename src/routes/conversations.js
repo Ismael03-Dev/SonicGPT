@@ -106,11 +106,13 @@ router.post("/conversations/:id/messages", async (req, res) => {
             temperature = 0.7,
             max_tokens = 400,
             webAccess = true,
-            callerId
+            callerId,
+            callerName,
+            imageUrl
         } = req.body || {};
 
-        if (!content || typeof content !== "string") {
-            return res.status(400).json({ error: { message: "Le champ 'content' (string) est requis." } });
+        if ((!content || typeof content !== "string") && !imageUrl) {
+            return res.status(400).json({ error: { message: "Le champ 'content' (string) ou 'imageUrl' est requis." } });
         }
 
         const convResult = await db.execute({
@@ -135,17 +137,26 @@ router.post("/conversations/:id/messages", async (req, res) => {
             args: [req.params.id]
         });
         const history = historyResult.rows.map(r => ({ role: r.role, content: r.content }));
+
+        const userMessageContent = imageUrl
+            ? [
+                  { type: "text", text: content || "Décris cette image." },
+                  { type: "image_url", image_url: imageUrl }
+              ]
+            : content;
+
         const fullMessages = [
-            { role: "system", content: buildSystemPrompt(callerId) },
+            { role: "system", content: buildSystemPrompt(callerId, callerName) },
             ...history,
-            { role: "user", content }
+            { role: "user", content: userMessageContent }
         ];
 
         const isFirstMessage = history.length === 0;
+        const storedUserContent = imageUrl ? `[Image] ${content || ""}`.trim() : content;
 
         await db.execute({
             sql: "INSERT INTO messages (conversation_id, role, content) VALUES (?, 'user', ?)",
-            args: [req.params.id, content]
+            args: [req.params.id, storedUserContent]
         });
 
         const modelConfig = resolveModel(conversation.model);
@@ -156,7 +167,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
                 const args = [];
                 if (isFirstMessage) {
                     updates.push("title = ?");
-                    args.push(makeTitle(content));
+                    args.push(makeTitle(storedUserContent));
                 }
                 args.push(req.params.id);
                 await db.execute({
