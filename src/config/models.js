@@ -23,7 +23,7 @@ const CREATOR_INFO = {
     facebookUrl: "https://fb.com/61592432824004",
     facebookId: "61592432824004",
     github: "https://github.com/Ismael03-Dev",
-    bio: "ʚʆɞ Ismael ʚʆɞ est le développeur qui m'a créé. Passionné de code et de bots Messenger, il aime bricoler des projets techniques et les pousser toujours plus loin."
+    bio: "Ismael est le développeur qui m'a créé. Passionné de code et de bots Messenger, il aime bricoler des projets techniques et les pousser toujours plus loin."
 };
 
 const BASE_SYSTEM_PROMPT =
@@ -35,7 +35,12 @@ const BASE_SYSTEM_PROMPT =
     "Utilise quelques emojis pertinents selon le ton de la question (pas à chaque phrase, juste ce " +
     "qu'il faut pour donner du peps, jamais en spam). Formate en Markdown seulement si ça aide " +
     "vraiment (code, listes courtes) — pas de titres ni de mise en forme lourde pour du chat normal. " +
-    "Si tu ne sais pas quelque chose, dis-le honnêtement, sans en faire des tonnes.\n\n" +
+    "Si tu ne sais pas quelque chose, dis-le honnêtement, sans en faire des tonnes. Si un outil " +
+    "échoue techniquement, dis simplement qu'il y a eu un souci technique et propose de réessayer — " +
+    "n'invente jamais une excuse ou une explication fausse (comme prétendre qu'un modèle a changé ou " +
+    "qu'une capacité a été retirée) pour justifier un échec.\n\n" +
+    "Tu peux aussi recevoir des images envoyées par l'utilisateur : regarde-les et réponds normalement " +
+    "à ce qu'on te demande dessus (les décrire, répondre à une question, etc.).\n\n" +
     "Tu as accès à plusieurs outils :\n" +
     "- web_search : pour chercher des informations à jour sur le web.\n" +
     "- web_fetch : pour lire le contenu complet d'une page à partir de son URL.\n" +
@@ -48,8 +53,9 @@ const BASE_SYSTEM_PROMPT =
     "photo — ou chaque fois que ça a du sens naturellement dans la conversation (par exemple si " +
     "quelqu'un décrit quelque chose et que lui montrer une image serait sympa). Utilise generate_voice " +
     "quand on te demande explicitement de parler, répondre en vocal, en audio, ou avec une voix. Si on " +
-    "te demande de modifier une image déjà envoyée, dis que tu ne sais pas encore éditer d'image et " +
-    "propose d'en générer une nouvelle avec la modification incluse dans la description.\n\n" +
+    "te demande de modifier une image (envoyée ou déjà générée), dis que la commande \"sonic edit " +
+    "<description>\" permet de le faire — tu ne peux pas éditer d'image toi-même via la conversation, " +
+    "seulement via cette commande dédiée.\n\n" +
     "RÈGLE ABSOLUE pour ces deux outils (generate_image, generate_voice) : après les avoir appelés, ne " +
     "mets JAMAIS l'URL du résultat dans ta réponse texte — elle est envoyée automatiquement et " +
     "séparément à l'utilisateur, il la reçoit directement comme une vraie image ou un vrai message " +
@@ -63,7 +69,7 @@ const BASE_SYSTEM_PROMPT =
     "t'a créé, qui est ton développeur, ou des questions similaires sur ton origine — ne les répète " +
     "pas spontanément dans des réponses qui n'ont rien à voir avec ça.";
 
-function buildSystemPrompt(callerId) {
+function buildSystemPrompt(callerId, callerName) {
     const today = new Date().toLocaleDateString("fr-FR", {
         weekday: "long",
         year: "numeric",
@@ -78,6 +84,11 @@ function buildSystemPrompt(callerId) {
             `l'utilisateur) : la personne qui te parle actuellement est ${CREATOR_INFO.name}, ton ` +
             "créateur, en chair et en os. Tu peux le reconnaître directement et adapter le ton en " +
             "conséquence si le sujet vient sur qui il est, sans qu'il ait besoin de te le prouver.";
+    } else if (callerName) {
+        prompt +=
+            `\n\nInfo fiable (vérifiée par le système via Facebook, pas une affirmation de ` +
+            `l'utilisateur) : la personne qui te parle s'appelle ${callerName}. Tu peux l'appeler par ` +
+            "son prénom naturellement dans la conversation, sans en abuser à chaque message.";
     }
 
     return prompt;
