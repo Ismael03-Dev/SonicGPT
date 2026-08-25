@@ -23,7 +23,7 @@ const CREATOR_INFO = {
     facebookUrl: "https://fb.com/61593517269556",
     facebookId: "61593517269556",
     github: "https://github.com/Ismael03-Dev",
-    bio: "Ismael est le développeur qui m'a créé. Passionné de code et de bots Messenger, il aime bricoler des projets techniques et les pousser toujours plus loin."
+    bio: "ʚʆɞ Ĩsmåęl ʚʆɞ est le développeur qui m'a créé. Passionné de code et de bots Messenger, il aime bricoler des projets techniques et les pousser toujours plus loin."
 };
 
 const BASE_SYSTEM_PROMPT =
