@@ -10,9 +10,9 @@ function chunkText(text, wordsPerChunk = 6) {
     return chunks;
 }
 
-async function simulateStream(text, onChunk, delayMs = 35) {
+async function simulateStream(text, onChunk, delayMs = 12) {
     if (!text) return;
-    const chunks = chunkText(text);
+    const chunks = chunkText(text, 10);
     for (const chunk of chunks) {
         onChunk(chunk);
         await sleep(delayMs);
