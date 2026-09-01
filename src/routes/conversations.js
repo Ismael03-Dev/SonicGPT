@@ -136,7 +136,8 @@ router.post("/conversations/:id/messages", async (req, res) => {
             sql: "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id ASC",
             args: [req.params.id]
         });
-        const history = historyResult.rows.map(r => ({ role: r.role, content: r.content }));
+        const fullHistory = historyResult.rows.map(r => ({ role: r.role, content: r.content }));
+        const history = fullHistory.slice(-10);
 
         const userMessageContent = imageUrl
             ? [
@@ -151,13 +152,13 @@ router.post("/conversations/:id/messages", async (req, res) => {
             { role: "user", content: userMessageContent }
         ];
 
-        const isFirstMessage = history.length === 0;
+        const isFirstMessage = fullHistory.length === 0;
         const storedUserContent = imageUrl ? `[Image] ${content || ""}`.trim() : content;
 
-        await db.execute({
+        db.execute({
             sql: "INSERT INTO messages (conversation_id, role, content) VALUES (?, 'user', ?)",
             args: [req.params.id, storedUserContent]
-        });
+        }).catch(e => console.error("[insert user message] échec silencieux :", e.message));
 
         const modelConfig = resolveModel(conversation.model);
 
@@ -170,14 +171,19 @@ router.post("/conversations/:id/messages", async (req, res) => {
                     args.push(makeTitle(storedUserContent));
                 }
                 args.push(req.params.id);
-                await db.execute({
-                    sql: `UPDATE conversations SET ${updates.join(", ")} WHERE id = ?`,
-                    args
-                });
-                await db.execute({
-                    sql: "INSERT INTO messages (conversation_id, role, content) VALUES (?, 'assistant', ?)",
-                    args: [req.params.id, assistantContent]
-                });
+                await db.batch(
+                    [
+                        {
+                            sql: `UPDATE conversations SET ${updates.join(", ")} WHERE id = ?`,
+                            args
+                        },
+                        {
+                            sql: "INSERT INTO messages (conversation_id, role, content) VALUES (?, 'assistant', ?)",
+                            args: [req.params.id, assistantContent]
+                        }
+                    ],
+                    "write"
+                );
             } catch (e) {
                 if (e.message && e.message.includes("FOREIGN KEY")) {
                     console.error(`[finalizeConversation] Conversation ${req.params.id} supprimée entre-temps, sauvegarde ignorée.`);
