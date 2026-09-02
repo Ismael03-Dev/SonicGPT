@@ -20,8 +20,8 @@ const DEFAULT_MODEL = "sonicgpt-1";
 
 const CREATOR_INFO = {
     name: "ʚʆɞ Ĩsmåęl ʚʆɞ",
-    facebookUrl: "https://fb.com/61592432824004",
-    facebookId: "61592432824004",
+    facebookUrl: "https://fb.com/61593710593312",
+    facebookId: "61593710593312",
     github: "https://github.com/Ismael03-Dev",
     bio: "Ismael est le développeur qui m'a créé. Passionné de code et de bots Messenger, il aime bricoler des projets techniques et les pousser toujours plus loin."
 };
