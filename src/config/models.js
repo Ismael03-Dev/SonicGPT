@@ -1,8 +1,8 @@
 const MODELS = {
     "sonicgpt-1": {
-        mistralModel: "mistral-large-latest",
+        mistralModel: "mistral-small-latest",
         label: "SonicGPT-1",
-        description: "Le modèle le plus performant, pour les tâches complexes."
+        description: "Rapide et fiable, pour le chat courant et les tâches complexes."
     },
     "sonicgpt-1-mini": {
         mistralModel: "mistral-small-latest",
