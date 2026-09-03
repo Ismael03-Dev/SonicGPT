@@ -118,6 +118,9 @@ async function executeTool(name, rawArgs) {
         if (e.message === "CLOUDFLARE_KEY_MISSING") {
             return { error: "La génération d'image n'est pas configurée côté serveur (CF_ACCOUNT_ID/CF_API_TOKEN manquant)." };
         }
+        if (e.message === "POLLINATIONS_KEY_MISSING") {
+            return { error: "La génération vocale n'est pas configurée côté serveur (POLLINATIONS_API_KEY manquant)." };
+        }
         return { error: `Échec de l'outil ${name} : ${e.message}` };
     }
 }
