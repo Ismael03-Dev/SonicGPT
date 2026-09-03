@@ -1,20 +1,27 @@
-const TTS_BASE_URL = "https://text.pollinations.ai";
+const AUDIO_BASE_URL = "https://gen.pollinations.ai/audio";
 const ALLOWED_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"];
 
-async function generateVoice({ text, voice = "nova" }) {
-    const safeVoice = ALLOWED_VOICES.includes(voice) ? voice : "nova";
-    const params = new URLSearchParams();
-    params.set("model", "openai-audio");
-    params.set("voice", safeVoice);
+function getApiKey() {
+    const key = process.env.POLLINATIONS_API_KEY;
+    if (!key) {
+        throw new Error("POLLINATIONS_KEY_MISSING");
+    }
+    return key;
+}
 
+async function generateVoice({ text, voice = "nova" }) {
+    const apiKey = getApiKey();
+    const safeVoice = ALLOWED_VOICES.includes(voice) ? voice : "nova";
     const encodedText = encodeURIComponent(text);
-    const url = `${TTS_BASE_URL}/${encodedText}?${params.toString()}`;
+    const url = `${AUDIO_BASE_URL}/${encodedText}?voice=${safeVoice}`;
 
     let response;
     try {
-        response = await fetch(url);
+        response = await fetch(url, {
+            headers: { Authorization: `Bearer ${apiKey}` }
+        });
     } catch (e) {
-        console.error("[pollinationsVoice] Échec réseau vers Pollinations TTS :", e.message);
+        console.error("[pollinationsVoice] Échec réseau vers gen.pollinations.ai :", e.message);
         throw new Error(`POLLINATIONS_TTS_NETWORK_ERROR: ${e.message}`);
     }
 
