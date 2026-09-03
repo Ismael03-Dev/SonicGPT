@@ -122,7 +122,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const conversation = convResult.rows[0];
         if (!conversation) return res.status(404).json({ error: { message: "Conversation introuvable." } });
 
-        const IDLE_RESET_MS = 30 * 1000;
+        const IDLE_RESET_MS = 5 * 60 * 1000;
         const lastActivity = new Date(conversation.updated_at.replace(" ", "T") + "Z").getTime();
         const idleMs = Date.now() - lastActivity;
         if (idleMs > IDLE_RESET_MS) {
