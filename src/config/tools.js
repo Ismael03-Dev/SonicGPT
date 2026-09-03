@@ -1,6 +1,6 @@
 const { tavilySearch, tavilyExtract } = require("../services/tavily");
 const { generateImage } = require("../services/cloudflare");
-const { generateVoice } = require("../services/googleTts");
+const { generateVoice } = require("../services/ttsEdge");
 
 const TOOLS = [
     {
