@@ -1,6 +1,6 @@
 const { tavilySearch, tavilyExtract } = require("../services/tavily");
 const { generateImage } = require("../services/cloudflare");
-const { generateVoice } = require("../services/pollinationsVoice");
+const { generateVoice } = require("../services/googleTts");
 
 const TOOLS = [
     {
@@ -74,9 +74,13 @@ const TOOLS = [
                     text: {
                         type: "string",
                         description: "Le texte à convertir en voix, dans la langue de la conversation."
+                    },
+                    lang: {
+                        type: "string",
+                        description: "Code langue à deux lettres correspondant à la langue du texte (fr, en, es, ar, pt, etc.). Toujours fournir ce paramètre pour que la prononciation soit correcte."
                     }
                 },
-                required: ["text"]
+                required: ["text", "lang"]
             }
         }
     }
@@ -106,7 +110,7 @@ async function executeTool(name, rawArgs) {
         }
         if (name === "generate_voice") {
             if (!args.text) return { error: "Le paramètre 'text' est requis." };
-            const result = await generateVoice({ text: args.text });
+            const result = await generateVoice({ text: args.text, lang: args.lang });
             return { type: "audio", base64: result.base64, mimeType: result.mimeType, text: args.text };
         }
         return { error: `Outil inconnu : ${name}` };
@@ -117,9 +121,6 @@ async function executeTool(name, rawArgs) {
         }
         if (e.message === "CLOUDFLARE_KEY_MISSING") {
             return { error: "La génération d'image n'est pas configurée côté serveur (CF_ACCOUNT_ID/CF_API_TOKEN manquant)." };
-        }
-        if (e.message === "POLLINATIONS_KEY_MISSING") {
-            return { error: "La génération vocale n'est pas configurée côté serveur (POLLINATIONS_API_KEY manquant)." };
         }
         return { error: `Échec de l'outil ${name} : ${e.message}` };
     }
