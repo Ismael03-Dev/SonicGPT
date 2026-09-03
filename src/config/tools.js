@@ -111,6 +111,7 @@ async function executeTool(name, rawArgs) {
         }
         return { error: `Outil inconnu : ${name}` };
     } catch (e) {
+        console.error(`[executeTool] Échec réel de l'outil ${name} :`, e.message, e.stack ? e.stack.split("\n")[0] : "");
         if (e.message === "TAVILY_KEY_MISSING") {
             return { error: "La recherche web n'est pas configurée côté serveur (TAVILY_API_KEY manquant)." };
         }
