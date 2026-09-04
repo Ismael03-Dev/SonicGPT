@@ -26,9 +26,10 @@ async function generateVoice({ text, lang }) {
         throw new Error(`EDGE_TTS_SETUP_ERROR: ${e.message}`);
     }
 
-    let readable;
+    let audioStream;
     try {
-        readable = tts.toStream(text);
+        const result = await tts.toStream(text);
+        audioStream = result.audioStream;
     } catch (e) {
         console.error("[ttsEdge] Échec toStream :", e.message);
         throw new Error(`EDGE_TTS_STREAM_INIT_ERROR: ${e.message}`);
@@ -36,12 +37,12 @@ async function generateVoice({ text, lang }) {
 
     const chunks = [];
     return new Promise((resolve, reject) => {
-        readable.on("data", (chunk) => chunks.push(chunk));
-        readable.on("close", () => {
+        audioStream.on("data", (chunk) => chunks.push(chunk));
+        audioStream.on("close", () => {
             const buffer = Buffer.concat(chunks);
             resolve({ base64: buffer.toString("base64"), mimeType: "audio/mpeg" });
         });
-        readable.on("error", (e) => {
+        audioStream.on("error", (e) => {
             console.error("[ttsEdge] Échec du flux audio :", e.message);
             reject(new Error(`EDGE_TTS_STREAM_ERROR: ${e.message}`));
         });
