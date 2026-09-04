@@ -1,12 +1,12 @@
-const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 function buildHeaders() {
-    if (!process.env.MISTRAL_API_KEY) {
-        throw new Error("MISTRAL_API_KEY manquant côté serveur.");
+    if (!process.env.GROQ_API_KEY) {
+        throw new Error("GROQ_API_KEY manquant côté serveur.");
     }
     return {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`
     };
 }
 
@@ -15,7 +15,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function fetchWithRetry(body, maxRetries = 2) {
     let lastError;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        const response = await fetch(MISTRAL_API_URL, {
+        const response = await fetch(GROQ_API_URL, {
             method: "POST",
             headers: buildHeaders(),
             body: JSON.stringify(body)
@@ -26,11 +26,11 @@ async function fetchWithRetry(body, maxRetries = 2) {
         }
 
         const errText = await response.text().catch(() => "");
-        lastError = new Error(`Mistral API error 429: ${errText}`);
+        lastError = new Error(`Groq API error 429: ${errText}`);
 
         if (attempt < maxRetries) {
             const waitMs = 1000 * (attempt + 1);
-            console.error(`[mistral] 429 reçu, nouvelle tentative dans ${waitMs}ms (essai ${attempt + 1}/${maxRetries})`);
+            console.error(`[groq] 429 reçu, nouvelle tentative dans ${waitMs}ms (essai ${attempt + 1}/${maxRetries})`);
             await sleep(waitMs);
         }
     }
@@ -48,7 +48,7 @@ async function completeMistralChat({ model, messages, temperature = 0.7, maxToke
 
     if (!response.ok) {
         const errText = await response.text().catch(() => "");
-        throw new Error(`Mistral API error ${response.status}: ${errText}`);
+        throw new Error(`Groq API error ${response.status}: ${errText}`);
     }
 
     const json = await response.json();
@@ -70,7 +70,7 @@ async function streamMistralChat({ model, messages, temperature = 0.7, maxTokens
 
     if (!response.ok || !response.body) {
         const errText = await response.text().catch(() => "");
-        throw new Error(`Mistral API error ${response.status}: ${errText}`);
+        throw new Error(`Groq API error ${response.status}: ${errText}`);
     }
 
     const decoder = new TextDecoder();
@@ -118,7 +118,7 @@ async function callMistralOnce({ model, messages, tools, temperature = 0.7, maxT
 
     if (!response.ok) {
         const errText = await response.text().catch(() => "");
-        throw new Error(`Mistral API error ${response.status}: ${errText}`);
+        throw new Error(`Groq API error ${response.status}: ${errText}`);
     }
 
     const json = await response.json();
