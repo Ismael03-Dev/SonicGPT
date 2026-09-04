@@ -10,17 +10,40 @@ function buildHeaders() {
     };
 }
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchWithRetry(body, maxRetries = 2) {
+    let lastError;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const response = await fetch(MISTRAL_API_URL, {
+            method: "POST",
+            headers: buildHeaders(),
+            body: JSON.stringify(body)
+        });
+
+        if (response.status !== 429) {
+            return response;
+        }
+
+        const errText = await response.text().catch(() => "");
+        lastError = new Error(`Mistral API error 429: ${errText}`);
+
+        if (attempt < maxRetries) {
+            const waitMs = 1000 * (attempt + 1);
+            console.error(`[mistral] 429 reçu, nouvelle tentative dans ${waitMs}ms (essai ${attempt + 1}/${maxRetries})`);
+            await sleep(waitMs);
+        }
+    }
+    throw lastError;
+}
+
 async function completeMistralChat({ model, messages, temperature = 0.7, maxTokens = 1024 }) {
-    const response = await fetch(MISTRAL_API_URL, {
-        method: "POST",
-        headers: buildHeaders(),
-        body: JSON.stringify({
-            model,
-            messages,
-            temperature,
-            max_tokens: maxTokens,
-            stream: false
-        })
+    const response = await fetchWithRetry({
+        model,
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+        stream: false
     });
 
     if (!response.ok) {
@@ -37,16 +60,12 @@ async function completeMistralChat({ model, messages, temperature = 0.7, maxToke
 }
 
 async function streamMistralChat({ model, messages, temperature = 0.7, maxTokens = 1024, onDelta }) {
-    const response = await fetch(MISTRAL_API_URL, {
-        method: "POST",
-        headers: buildHeaders(),
-        body: JSON.stringify({
-            model,
-            messages,
-            temperature,
-            max_tokens: maxTokens,
-            stream: true
-        })
+    const response = await fetchWithRetry({
+        model,
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+        stream: true
     });
 
     if (!response.ok || !response.body) {
@@ -95,11 +114,7 @@ async function callMistralOnce({ model, messages, tools, temperature = 0.7, maxT
         body.tool_choice = "auto";
     }
 
-    const response = await fetch(MISTRAL_API_URL, {
-        method: "POST",
-        headers: buildHeaders(),
-        body: JSON.stringify(body)
-    });
+    const response = await fetchWithRetry(body);
 
     if (!response.ok) {
         const errText = await response.text().catch(() => "");
