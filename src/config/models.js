@@ -1,16 +1,16 @@
 const MODELS = {
     "sonicgpt-1": {
-        mistralModel: "mistral-small-latest",
+        mistralModel: "llama-3.3-70b-versatile",
         label: "SonicGPT-1",
-        description: "Rapide et fiable, pour le chat courant et les tâches complexes."
+        description: "Le modèle le plus performant, pour les tâches complexes."
     },
     "sonicgpt-1-mini": {
-        mistralModel: "mistral-small-latest",
+        mistralModel: "llama-3.1-8b-instant",
         label: "SonicGPT-1 Mini",
         description: "Rapide et économique, pour les tâches simples et le chat courant."
     },
     "sonicgpt-1-code": {
-        mistralModel: "codestral-latest",
+        mistralModel: "llama-3.3-70b-versatile",
         label: "SonicGPT-1 Code",
         description: "Spécialisé génération et complétion de code."
     }
@@ -20,8 +20,8 @@ const DEFAULT_MODEL = "sonicgpt-1";
 
 const CREATOR_INFO = {
     name: "ʚʆɞ Ĩsmåęl ʚʆɞ",
-    facebookUrl: "https://fb.com/61593710593312",
-    facebookId: "61593710593312",
+    facebookUrl: "https://fb.com/61592432824004",
+    facebookId: "61592432824004",
     github: "https://github.com/Ismael03-Dev",
     bio: "Ismael est le développeur qui m'a créé. Passionné de code et de bots Messenger, il aime bricoler des projets techniques et les pousser toujours plus loin."
 };
