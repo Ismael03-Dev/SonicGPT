@@ -44,7 +44,12 @@ function ensureSchema() {
                         content TEXT NOT NULL,
                         created_at TEXT NOT NULL DEFAULT (datetime('now'))
                     )`,
-                    `CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)`
+                    `CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)`,
+                    `CREATE TABLE IF NOT EXISTS rate_limits (
+                        ip TEXT PRIMARY KEY,
+                        count INTEGER NOT NULL DEFAULT 0,
+                        window_start TEXT NOT NULL
+                    )`
                 ],
                 "write"
             )
