@@ -1,5 +1,5 @@
 const { tavilySearch, tavilyExtract } = require("../services/tavily");
-const { generateImage } = require("../services/cloudflare");
+const { generateImage, editImage } = require("../services/cloudflare");
 const { generateVoice } = require("../services/ttsEdge");
 
 const TOOLS = [
@@ -63,6 +63,28 @@ const TOOLS = [
     {
         type: "function",
         function: {
+            name: "edit_image",
+            description:
+                "Modifie la dernière image générée dans cette conversation à partir d'une consigne " +
+                "texte (par exemple : ajoute un chapeau, change le fond, rends-la en style peinture...). " +
+                "Utilise cet outil quand on te demande de modifier, retoucher, ou changer une image " +
+                "déjà générée. Ne fonctionne que sur les images que TU as générées via generate_image, " +
+                "pas sur les photos envoyées par l'utilisateur.",
+            parameters: {
+                type: "object",
+                properties: {
+                    instruction: {
+                        type: "string",
+                        description: "Description de la modification à apporter à l'image."
+                    }
+                },
+                required: ["instruction"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
             name: "generate_voice",
             description:
                 "Convertit du texte en message vocal audio et l'envoie à l'utilisateur. Utilise cet " +
@@ -86,7 +108,7 @@ const TOOLS = [
     }
 ];
 
-async function executeTool(name, rawArgs) {
+async function executeTool(name, rawArgs, context = {}) {
     let args = {};
     try {
         args = JSON.parse(rawArgs || "{}");
@@ -107,6 +129,18 @@ async function executeTool(name, rawArgs) {
             if (!args.prompt) return { error: "Le paramètre 'prompt' est requis." };
             const result = await generateImage({ prompt: args.prompt });
             return { type: "image", base64: result.base64, mimeType: result.mimeType, prompt: args.prompt };
+        }
+        if (name === "edit_image") {
+            if (!args.instruction) return { error: "Le paramètre 'instruction' est requis." };
+            if (!context.lastImageBase64) {
+                return { error: "Aucune image récente générée par toi à modifier. Génère d'abord une image." };
+            }
+            const result = await editImage({
+                base64: context.lastImageBase64,
+                mimeType: context.lastImageMimeType,
+                instruction: args.instruction
+            });
+            return { type: "image", base64: result.base64, mimeType: result.mimeType, prompt: args.instruction };
         }
         if (name === "generate_voice") {
             if (!args.text) return { error: "Le paramètre 'text' est requis." };
