@@ -20,7 +20,7 @@ async function generateImage({ prompt }) {
             Authorization: `Bearer ${apiToken}`,
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({ prompt, width: 512, height: 512 })
+        body: JSON.stringify({ prompt })
     });
 
     if (!response.ok) {
