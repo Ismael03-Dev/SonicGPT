@@ -32,6 +32,7 @@ app.use("/v1", auth, conversationsRoutes);
 app.use("/v1", auth, mediaRoutes);
 
 app.use("/public/v1", publicRateLimit, conversationsRoutes);
+app.use("/public/v1", publicRateLimit, mediaRoutes);
 
 app.use((req, res) => {
     res.status(404).json({ error: { message: "Route introuvable." } });
