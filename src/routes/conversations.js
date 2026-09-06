@@ -108,11 +108,15 @@ router.post("/conversations/:id/messages", async (req, res) => {
             webAccess = true,
             callerId,
             callerName,
-            imageUrl
+            imageUrl,
+            imageBase64,
+            imageMimeType
         } = req.body || {};
 
-        if ((!content || typeof content !== "string") && !imageUrl) {
-            return res.status(400).json({ error: { message: "Le champ 'content' (string) ou 'imageUrl' est requis." } });
+        const effectiveImageUrl = imageUrl || (imageBase64 ? `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}` : null);
+
+        if ((!content || typeof content !== "string") && !effectiveImageUrl) {
+            return res.status(400).json({ error: { message: "Le champ 'content', 'imageUrl' ou 'imageBase64' est requis." } });
         }
 
         const convResult = await db.execute({
@@ -147,10 +151,10 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const fullHistory = historyResult.rows.map(r => ({ role: r.role, content: r.content }));
         const history = fullHistory.slice(-10);
 
-        const userMessageContent = imageUrl
+        const userMessageContent = effectiveImageUrl
             ? [
                   { type: "text", text: content || "Décris cette image." },
-                  { type: "image_url", image_url: { url: imageUrl } }
+                  { type: "image_url", image_url: { url: effectiveImageUrl } }
               ]
             : content;
 
@@ -161,7 +165,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         ];
 
         const isFirstMessage = fullHistory.length === 0;
-        const storedUserContent = imageUrl ? `[Image] ${content || ""}`.trim() : content;
+        const storedUserContent = effectiveImageUrl ? `[Image] ${content || ""}`.trim() : content;
 
         db.execute({
             sql: "INSERT INTO messages (conversation_id, role, content) VALUES (?, 'user', ?)",
