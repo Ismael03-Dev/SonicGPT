@@ -298,29 +298,93 @@ previewRemove.addEventListener("click", () => {
     previewBar.style.display = "none";
 });
 
+let pendingAudioBlob = null;
+let audioContext = null;
+let analyser = null;
+let waveformFrame = null;
+let recordStream = null;
+
+function startWaveform(canvas) {
+    const ctx = canvas.getContext("2d");
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(recordStream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    function draw() {
+        waveformFrame = requestAnimationFrame(draw);
+        analyser.getByteFrequencyData(dataArray);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const barWidth = (canvas.width / bufferLength) * 2.5;
+        let x = 0;
+        for (let i = 0; i < bufferLength; i++) {
+            const barHeight = (dataArray[i] / 255) * canvas.height;
+            ctx.fillStyle = "#7c5cff";
+            ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+            x += barWidth + 1;
+        }
+    }
+    draw();
+}
+
+function stopWaveform() {
+    if (waveformFrame) cancelAnimationFrame(waveformFrame);
+    if (audioContext) audioContext.close().catch(() => {});
+    waveformFrame = null;
+    audioContext = null;
+    analyser = null;
+}
+
 micBtn.addEventListener("click", async () => {
     if (isRecording) {
         mediaRecorder.stop();
         return;
     }
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
+        recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(recordStream);
         audioChunks = [];
-        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-        mediaRecorder.onstop = async () => {
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
             isRecording = false;
             micBtn.classList.remove("recording");
-            stream.getTracks().forEach(t => t.stop());
-            const blob = new Blob(audioChunks, { type: "audio/webm" });
-            await sendAudioMessage(blob);
+            micBtn.textContent = "🎤";
+            stopWaveform();
+            recordStream.getTracks().forEach(t => t.stop());
+            previewBar.querySelector("canvas")?.remove();
+
+            pendingAudioBlob = new Blob(audioChunks, { type: "audio/webm" });
+            previewImg.style.display = "none";
+            previewLabel.textContent = "🎙️ Message vocal prêt (" + (pendingAudioBlob.size / 1024).toFixed(0) + " Ko)";
+            previewBar.style.display = "flex";
         };
         mediaRecorder.start();
         isRecording = true;
         micBtn.classList.add("recording");
+        micBtn.textContent = "⏹";
+
+        previewImg.style.display = "none";
+        previewLabel.textContent = "";
+        const canvas = document.createElement("canvas");
+        canvas.width = 140;
+        canvas.height = 30;
+        previewLabel.after(canvas);
+        previewBar.style.display = "flex";
+        startWaveform(canvas);
     } catch (e) {
         addBubble("bot", "❌ Impossible d'accéder au micro : " + escapeHtml(e.message));
     }
+});
+
+previewRemove.addEventListener("click", () => {
+    pendingImage = null;
+    pendingAudioBlob = null;
+    previewBar.querySelector("canvas")?.remove();
+    previewImg.style.display = "";
+    previewBar.style.display = "none";
 });
 
 async function sendAudioMessage(blob) {
@@ -345,7 +409,19 @@ async function sendAudioMessage(blob) {
 
 async function sendMessage() {
     const text = textInput.value.trim();
-    if (!text && !pendingImage) return;
+    if (!text && !pendingImage && !pendingAudioBlob) return;
+
+    if (pendingAudioBlob) {
+        const blob = pendingAudioBlob;
+        pendingAudioBlob = null;
+        previewBar.querySelector("canvas")?.remove();
+        previewImg.style.display = "";
+        previewBar.style.display = "none";
+        sendBtn.disabled = true;
+        await sendAudioMessage(blob);
+        sendBtn.disabled = false;
+        return;
+    }
 
     const image = pendingImage;
     pendingImage = null;
