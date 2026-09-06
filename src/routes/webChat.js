@@ -5,6 +5,13 @@ function renderChatPage() {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SonicGPT</title>
+<link rel="icon" type="image/jpeg" href="https://i.imgur.com/PeWYQV.jpeg">
+<meta property="og:title" content="SonicGPT">
+<meta property="og:description" content="Discute avec SonicGPT, l'IA qui cherche sur le web, voit tes images et te répond en vocal.">
+<meta property="og:image" content="https://i.imgur.com/PeWYQV.jpeg">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://i.imgur.com/PeWYQV.jpeg">
 <style>
     * { box-sizing: border-box; }
     body {
@@ -153,7 +160,10 @@ function renderChatPage() {
 <body>
 
 <header id="mainHeader">
-    <h1>SonicGPT</h1>
+    <div style="display:flex;align-items:center;gap:10px;">
+        <img src="https://i.imgur.com/PeWYQV.jpeg" alt="SonicGPT" style="width:32px;height:32px;border-radius:8px;object-fit:cover;">
+        <h1>SonicGPT</h1>
+    </div>
     <button id="resetBtn">Réinitialiser</button>
 </header>
 <div id="messages"></div>
