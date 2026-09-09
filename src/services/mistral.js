@@ -12,7 +12,7 @@ function buildHeaders() {
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function fetchWithRetry(body, maxRetries = 2) {
+async function fetchWithRetry(body, maxRetries = 3) {
     let lastError;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const response = await fetch(GROQ_API_URL, {
@@ -21,16 +21,16 @@ async function fetchWithRetry(body, maxRetries = 2) {
             body: JSON.stringify(body)
         });
 
-        if (response.status !== 429) {
+        if (response.status !== 429 && response.status !== 503) {
             return response;
         }
 
         const errText = await response.text().catch(() => "");
-        lastError = new Error(`Groq API error 429: ${errText}`);
+        lastError = new Error(`Groq API error ${response.status}: ${errText}`);
 
         if (attempt < maxRetries) {
-            const waitMs = 1000 * (attempt + 1);
-            console.error(`[groq] 429 reçu, nouvelle tentative dans ${waitMs}ms (essai ${attempt + 1}/${maxRetries})`);
+            const waitMs = response.status === 503 ? 1500 * (attempt + 1) : 1000 * (attempt + 1);
+            console.error(`[groq] ${response.status} reçu, nouvelle tentative dans ${waitMs}ms (essai ${attempt + 1}/${maxRetries})`);
             await sleep(waitMs);
         }
     }
