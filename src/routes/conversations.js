@@ -145,11 +145,18 @@ router.post("/conversations/:id/messages", async (req, res) => {
         }
 
         const historyResult = await db.execute({
-            sql: "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id ASC",
+            sql: "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 6",
             args: [req.params.id]
         });
-        const fullHistory = historyResult.rows.map(r => ({ role: r.role, content: r.content }));
-        const history = fullHistory.slice(-10);
+        const history = historyResult.rows
+            .map(r => ({ role: r.role, content: String(r.content).slice(0, 600) }))
+            .reverse();
+
+        const countResult = await db.execute({
+            sql: "SELECT COUNT(*) as total FROM messages WHERE conversation_id = ?",
+            args: [req.params.id]
+        });
+        const isFirstMessage = Number(countResult.rows[0]?.total || 0) === 0;
 
         const userMessageContent = effectiveImageUrl
             ? [
@@ -164,7 +171,6 @@ router.post("/conversations/:id/messages", async (req, res) => {
             { role: "user", content: userMessageContent }
         ];
 
-        const isFirstMessage = fullHistory.length === 0;
         const storedUserContent = effectiveImageUrl ? `[Image] ${content || ""}`.trim() : content;
 
         db.execute({
@@ -173,7 +179,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         }).catch(e => console.error("[insert user message] échec silencieux :", e.message));
 
         const modelConfig = resolveModel(conversation.model);
-        const VISION_MODEL = "qwen/qwen3.6-27b";
+        const VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
         const activeModel = effectiveImageUrl ? VISION_MODEL : modelConfig.mistralModel;
 
         const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType) => {
@@ -226,7 +232,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
                 } = await runToolLoop({
                     model: activeModel,
                     messages: fullMessages,
-                    tools: webAccess ? TOOLS : undefined,
+                    tools: webAccess && !effectiveImageUrl ? TOOLS : undefined,
                     temperature,
                     maxTokens: max_tokens,
                     toolContext: { lastImageBase64, lastImageMimeType },
@@ -277,7 +283,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         } = await runToolLoop({
             model: activeModel,
             messages: fullMessages,
-            tools: webAccess ? TOOLS : undefined,
+            tools: webAccess && !effectiveImageUrl ? TOOLS : undefined,
             temperature,
             maxTokens: max_tokens,
             toolContext: { lastImageBase64, lastImageMimeType },
