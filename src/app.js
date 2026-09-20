@@ -7,6 +7,7 @@ const publicRateLimit = require("./middleware/publicRateLimit");
 const completionsRoutes = require("./routes/completions");
 const conversationsRoutes = require("./routes/conversations");
 const mediaRoutes = require("./routes/media");
+const diagnosticsRoutes = require("./routes/diagnostics");
 const { renderChatPage } = require("./routes/webChat");
 
 const app = express();
@@ -30,6 +31,7 @@ app.get("/status", (req, res) => {
 app.use("/v1", auth, completionsRoutes);
 app.use("/v1", auth, conversationsRoutes);
 app.use("/v1", auth, mediaRoutes);
+app.use("/v1", auth, diagnosticsRoutes);
 
 app.use("/public/v1", publicRateLimit, conversationsRoutes);
 app.use("/public/v1", publicRateLimit, mediaRoutes);
