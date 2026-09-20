@@ -31,7 +31,7 @@ app.get("/status", (req, res) => {
 app.use("/v1", auth, completionsRoutes);
 app.use("/v1", auth, conversationsRoutes);
 app.use("/v1", auth, mediaRoutes);
-app.use("/v1", auth, diagnosticsRoutes);
+app.use("/diagnostics", diagnosticsRoutes);
 
 app.use("/public/v1", publicRateLimit, conversationsRoutes);
 app.use("/public/v1", publicRateLimit, mediaRoutes);
