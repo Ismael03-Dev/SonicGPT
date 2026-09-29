@@ -5,6 +5,8 @@ const { DEFAULT_MODEL, buildSystemPrompt, resolveModel, MODELS } = require("../c
 const { runToolLoop } = require("../services/agent");
 const { TOOLS } = require("../config/tools");
 const { simulateStream } = require("../utils/streamText");
+const { generateVoice } = require("../services/ttsEdge");
+const { detectLanguage } = require("../utils/detectLanguage");
 
 const router = express.Router();
 
@@ -110,7 +112,8 @@ router.post("/conversations/:id/messages", async (req, res) => {
             callerName,
             imageUrl,
             imageBase64,
-            imageMimeType
+            imageMimeType,
+            voiceInput = false
         } = req.body || {};
 
         const effectiveImageUrl = imageUrl || (imageBase64 ? `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}` : null);
