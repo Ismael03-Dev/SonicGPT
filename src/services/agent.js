@@ -42,6 +42,7 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
                 if ((toolName === "generate_image" || toolName === "edit_image") && result && result.base64) {
                     context.lastImageBase64 = result.base64;
                     context.lastImageMimeType = result.mimeType;
+                    context.lastImageUrl = null;
                 }
 
                 if (onToolResult) {
@@ -68,7 +69,8 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
             usage,
             toolsUsed: step > 0,
             lastImageBase64: context.lastImageBase64 || toolContext.lastImageBase64 || null,
-            lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null
+            lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null,
+            lastImageUrl: context.lastImageUrl !== undefined ? context.lastImageUrl : (toolContext.lastImageUrl || null)
         };
     }
 
@@ -78,7 +80,8 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
         usage: null,
         toolsUsed: true,
         lastImageBase64: context.lastImageBase64 || toolContext.lastImageBase64 || null,
-        lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null
+        lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null,
+        lastImageUrl: context.lastImageUrl !== undefined ? context.lastImageUrl : (toolContext.lastImageUrl || null)
     };
 }
 
