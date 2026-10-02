@@ -54,7 +54,8 @@ function ensureSchema() {
                 "write"
             )
             .then(() => migrateAddColumn("conversations", "last_image_base64", "TEXT"))
-            .then(() => migrateAddColumn("conversations", "last_image_mime", "TEXT"));
+            .then(() => migrateAddColumn("conversations", "last_image_mime", "TEXT"))
+            .then(() => migrateAddColumn("conversations", "last_image_url", "TEXT"));
     }
     return initPromise;
 }
