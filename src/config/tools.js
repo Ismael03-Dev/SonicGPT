@@ -1,5 +1,6 @@
 const { tavilySearch, tavilyExtract } = require("../services/tavily");
 const { generateImage, editImage } = require("../services/cloudflare");
+const { editImageViaUrl } = require("../services/azadEdit");
 const { generateVoice } = require("../services/ttsEdge");
 
 const TOOLS = [
@@ -65,11 +66,10 @@ const TOOLS = [
         function: {
             name: "edit_image",
             description:
-                "Modifie la dernière image générée dans cette conversation à partir d'une consigne " +
-                "texte (par exemple : ajoute un chapeau, change le fond, rends-la en style peinture...). " +
-                "Utilise cet outil quand on te demande de modifier, retoucher, ou changer une image " +
-                "déjà générée. Ne fonctionne que sur les images que TU as générées via generate_image, " +
-                "pas sur les photos envoyées par l'utilisateur.",
+                "Modifie la dernière image de la conversation (une photo envoyée par l'utilisateur OU " +
+                "une image que tu as générée) à partir d'une consigne texte (ajoute un chapeau, change " +
+                "le style, change le fond...). Utilise cet outil quand on te demande de modifier, " +
+                "retoucher ou changer une image déjà montrée dans la conversation.",
             parameters: {
                 type: "object",
                 properties: {
@@ -132,15 +132,22 @@ async function executeTool(name, rawArgs, context = {}) {
         }
         if (name === "edit_image") {
             if (!args.instruction) return { error: "Le paramètre 'instruction' est requis." };
-            if (!context.lastImageBase64) {
-                return { error: "Aucune image récente générée par toi à modifier. Génère d'abord une image." };
+
+            if (context.lastImageUrl) {
+                const result = await editImageViaUrl(context.lastImageUrl, args.instruction);
+                return { type: "image", base64: result.base64, mimeType: result.mimeType, prompt: args.instruction };
             }
-            const result = await editImage({
-                base64: context.lastImageBase64,
-                mimeType: context.lastImageMimeType,
-                instruction: args.instruction
-            });
-            return { type: "image", base64: result.base64, mimeType: result.mimeType, prompt: args.instruction };
+
+            if (context.lastImageBase64) {
+                const result = await editImage({
+                    base64: context.lastImageBase64,
+                    mimeType: context.lastImageMimeType,
+                    instruction: args.instruction
+                });
+                return { type: "image", base64: result.base64, mimeType: result.mimeType, prompt: args.instruction };
+            }
+
+            return { error: "Aucune image récente à modifier. Envoie une photo ou génère d'abord une image." };
         }
         if (name === "generate_voice") {
             if (!args.text) return { error: "Le paramètre 'text' est requis." };
