@@ -184,6 +184,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const modelConfig = resolveModel(conversation.model);
         const VISION_MODEL = "qwen/qwen3.8-27b";
         const activeModel = effectiveImageUrl ? VISION_MODEL : modelConfig.mistralModel;
+        const activeTools = webAccess ? TOOLS.filter(tool => !["web_search", "web_fetch"].includes(tool.function.name)) : undefined;
 
         const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType) => {
             try {
@@ -235,7 +236,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
                 } = await runToolLoop({
                     model: activeModel,
                     messages: fullMessages,
-                    tools: webAccess && !effectiveImageUrl ? TOOLS : undefined,
+                    tools: activeTools,
                     temperature,
                     maxTokens: max_tokens,
                     toolContext: { lastImageBase64, lastImageMimeType },
@@ -286,7 +287,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         } = await runToolLoop({
             model: activeModel,
             messages: fullMessages,
-            tools: webAccess && !effectiveImageUrl ? TOOLS : undefined,
+            tools: activeTools,
             temperature,
             maxTokens: max_tokens,
             toolContext: { lastImageBase64, lastImageMimeType },
