@@ -134,17 +134,29 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const idleMs = Date.now() - lastActivity;
         let lastImageBase64 = conversation.last_image_base64 || null;
         let lastImageMimeType = conversation.last_image_mime || null;
+        let lastImageUrl = conversation.last_image_url || null;
         if (idleMs > IDLE_RESET_MS) {
             await db.execute({
                 sql: "DELETE FROM messages WHERE conversation_id = ?",
                 args: [req.params.id]
             });
             await db.execute({
-                sql: "UPDATE conversations SET last_image_base64 = NULL, last_image_mime = NULL WHERE id = ?",
+                sql: "UPDATE conversations SET last_image_base64 = NULL, last_image_mime = NULL, last_image_url = NULL WHERE id = ?",
                 args: [req.params.id]
             });
             lastImageBase64 = null;
             lastImageMimeType = null;
+            lastImageUrl = null;
+        }
+
+        if (effectiveImageUrl && !effectiveImageUrl.startsWith("data:")) {
+            lastImageUrl = effectiveImageUrl;
+            lastImageBase64 = null;
+            lastImageMimeType = null;
+        } else if (imageBase64) {
+            lastImageBase64 = imageBase64;
+            lastImageMimeType = imageMimeType || "image/jpeg";
+            lastImageUrl = null;
         }
 
         const historyResult = await db.execute({
@@ -184,16 +196,6 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const modelConfig = resolveModel(conversation.model);
         const VISION_MODEL = "qwen/qwen3.8-27b";
         const activeModel = effectiveImageUrl ? VISION_MODEL : modelConfig.mistralModel;
-
-        const activeToolContext = effectiveImageUrl
-            ? {
-                  lastImageBase64: imageBase64 || lastImageBase64,
-                  lastImageMimeType: imageMimeType || lastImageMimeType,
-                  lastImageUrl: effectiveImageUrl
-              }
-            : { lastImageBase64, lastImageMimeType };
-
-        const activeTools = webAccess ? TOOLS : undefined;
 
         const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType) => {
             try {
@@ -245,10 +247,10 @@ router.post("/conversations/:id/messages", async (req, res) => {
                 } = await runToolLoop({
                     model: activeModel,
                     messages: fullMessages,
-                    tools: activeTools,
+                    tools: webAccess && !effectiveImageUrl ? TOOLS : undefined,
                     temperature,
                     maxTokens: max_tokens,
-                    toolContext: activeToolContext,
+                    toolContext: { lastImageBase64, lastImageMimeType },
                     onToolCall: ({ name, args }) => {
                         res.write(
                             `data: ${JSON.stringify({ type: "tool_call", tool: name, input: args, done: false })}\n\n`
@@ -296,10 +298,10 @@ router.post("/conversations/:id/messages", async (req, res) => {
         } = await runToolLoop({
             model: activeModel,
             messages: fullMessages,
-            tools: activeTools,
+            tools: webAccess && !effectiveImageUrl ? TOOLS : undefined,
             temperature,
             maxTokens: max_tokens,
-            toolContext: activeToolContext,
+            toolContext: { lastImageBase64, lastImageMimeType },
             onToolResult: ({ name, result }) => {
                 if ((name === "generate_image" || name === "generate_voice" || name === "edit_image") && result && result.base64) {
                     mediaResults.push({ tool: name, mediaType: result.type, base64: result.base64, mimeType: result.mimeType });
