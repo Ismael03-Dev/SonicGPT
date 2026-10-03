@@ -184,7 +184,16 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const modelConfig = resolveModel(conversation.model);
         const VISION_MODEL = "qwen/qwen3.8-27b";
         const activeModel = effectiveImageUrl ? VISION_MODEL : modelConfig.mistralModel;
-        const activeTools = webAccess ? TOOLS.filter(tool => !["web_search", "web_fetch"].includes(tool.function.name)) : undefined;
+
+        const activeToolContext = effectiveImageUrl
+            ? {
+                  lastImageBase64: imageBase64 || lastImageBase64,
+                  lastImageMimeType: imageMimeType || lastImageMimeType,
+                  lastImageUrl: effectiveImageUrl
+              }
+            : { lastImageBase64, lastImageMimeType };
+
+        const activeTools = webAccess ? TOOLS : undefined;
 
         const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType) => {
             try {
@@ -239,7 +248,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
                     tools: activeTools,
                     temperature,
                     maxTokens: max_tokens,
-                    toolContext: { lastImageBase64, lastImageMimeType },
+                    toolContext: activeToolContext,
                     onToolCall: ({ name, args }) => {
                         res.write(
                             `data: ${JSON.stringify({ type: "tool_call", tool: name, input: args, done: false })}\n\n`
@@ -290,7 +299,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
             tools: activeTools,
             temperature,
             maxTokens: max_tokens,
-            toolContext: { lastImageBase64, lastImageMimeType },
+            toolContext: activeToolContext,
             onToolResult: ({ name, result }) => {
                 if ((name === "generate_image" || name === "generate_voice" || name === "edit_image") && result && result.base64) {
                     mediaResults.push({ tool: name, mediaType: result.type, base64: result.base64, mimeType: result.mimeType });
