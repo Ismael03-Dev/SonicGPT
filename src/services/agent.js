@@ -3,18 +3,36 @@ const { executeTool } = require("../config/tools");
 
 const MAX_TOOL_STEPS = 4;
 
-async function runToolLoop({ model, messages, tools, temperature, maxTokens, onToolCall, onToolResult, toolContext = {} }) {
+async function runToolLoop({ models, messages, tools, temperature, maxTokens, onToolCall, onToolResult, toolContext = {} }) {
     let workingMessages = [...messages];
     const context = { ...toolContext };
+    const modelList = Array.isArray(models) ? models : [models];
 
     for (let step = 0; step < MAX_TOOL_STEPS; step++) {
-        const { message, finishReason, usage } = await callMistralOnce({
-            model,
-            messages: workingMessages,
-            tools,
-            temperature,
-            maxTokens
-        });
+        let lastError = null;
+        let result = null;
+
+        for (const modelName of modelList) {
+            try {
+                result = await callMistralOnce({
+                    model: modelName,
+                    messages: workingMessages,
+                    tools,
+                    temperature,
+                    maxTokens
+                });
+                break;
+            } catch (e) {
+                lastError = e;
+                console.error(`[agent] Modèle ${modelName} échoué :`, e.message.slice(0, 150));
+            }
+        }
+
+        if (!result) {
+            throw lastError || new Error("Aucun modèle n'a pu répondre.");
+        }
+
+        const { message, finishReason, usage } = result;
 
         if (message.tool_calls && message.tool_calls.length > 0) {
             workingMessages.push({
@@ -37,21 +55,20 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
                     onToolCall({ name: toolName, args: parsedArgs });
                 }
 
-                const result = await executeTool(toolName, toolArgs, context);
+                const resultTool = await executeTool(toolName, toolArgs, context);
 
-                if ((toolName === "generate_image" || toolName === "edit_image") && result && result.base64) {
-                    context.lastImageBase64 = result.base64;
-                    context.lastImageMimeType = result.mimeType;
-                    context.lastImageUrl = null;
+                if ((toolName === "generate_image" || toolName === "edit_image") && resultTool && resultTool.base64) {
+                    context.lastImageBase64 = resultTool.base64;
+                    context.lastImageMimeType = resultTool.mimeType;
                 }
 
                 if (onToolResult) {
-                    onToolResult({ name: toolName, result });
+                    onToolResult({ name: toolName, result: resultTool });
                 }
 
-                const modelFacingResult = result.base64
-                    ? { success: true, type: result.type, note: "Média généré et envoyé automatiquement à l'utilisateur." }
-                    : result;
+                const modelFacingResult = resultTool.base64
+                    ? { success: true, type: resultTool.type, note: "Média généré et envoyé automatiquement à l'utilisateur." }
+                    : resultTool;
 
                 workingMessages.push({
                     role: "tool",
@@ -69,8 +86,7 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
             usage,
             toolsUsed: step > 0,
             lastImageBase64: context.lastImageBase64 || toolContext.lastImageBase64 || null,
-            lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null,
-            lastImageUrl: context.lastImageUrl !== undefined ? context.lastImageUrl : (toolContext.lastImageUrl || null)
+            lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null
         };
     }
 
@@ -80,8 +96,7 @@ async function runToolLoop({ model, messages, tools, temperature, maxTokens, onT
         usage: null,
         toolsUsed: true,
         lastImageBase64: context.lastImageBase64 || toolContext.lastImageBase64 || null,
-        lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null,
-        lastImageUrl: context.lastImageUrl !== undefined ? context.lastImageUrl : (toolContext.lastImageUrl || null)
+        lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null
     };
 }
 
