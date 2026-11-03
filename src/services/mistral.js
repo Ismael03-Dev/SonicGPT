@@ -12,7 +12,7 @@ function buildHeaders() {
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function fetchWithRetry(body, maxRetries = 1) {
+async function fetchWithRetry(body, maxRetries = 2) {
     let lastError;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const response = await fetch(GROQ_API_URL, {
