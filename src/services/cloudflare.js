@@ -1,5 +1,5 @@
 const GENERATE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
-const EDIT_MODEL = "@cf/stable-diffusion-xl-base-1.0";
+const EDIT_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0";
 
 function getCloudflareConfig() {
     const accountId = process.env.CF_ACCOUNT_ID;
