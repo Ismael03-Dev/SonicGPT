@@ -187,8 +187,8 @@ router.post("/conversations/:id/messages", async (req, res) => {
         }).catch(e => console.error("[insert user message] échec silencieux :", e.message));
 
         const modelConfig = resolveModel(conversation.model);
-        const VISION_MODEL = "qwen/qwen3.8-27b";
-        const activeModel = effectiveImageUrl ? VISION_MODEL : modelConfig.mistralModel;
+        const VISION_MODELS = ["qwen/qwen3.8-27b", "meta-llama/llama-4-scout-17b-16e-instruct"];
+        const activeModels = effectiveImageUrl ? VISION_MODELS : [modelConfig.mistralModel];
         const toolsForThisTurn = webAccess ? TOOLS : undefined;
 
         const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType) => {
@@ -253,7 +253,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
                     lastImageBase64: newLastImageBase64,
                     lastImageMimeType: newLastImageMimeType
                 } = await runToolLoop({
-                    model: activeModel,
+                    models: activeModels,
                     messages: fullMessages,
                     tools: toolsForThisTurn,
                     temperature,
@@ -312,7 +312,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
             lastImageBase64: newLastImageBase64,
             lastImageMimeType: newLastImageMimeType
         } = await runToolLoop({
-            model: activeModel,
+            models: activeModels,
             messages: fullMessages,
             tools: toolsForThisTurn,
             temperature,
