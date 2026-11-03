@@ -1,8 +1,8 @@
 const MODELS = {
     "sonicgpt-1": {
-        mistralModel: "openai/gpt-oss-20b",
+        mistralModel: "openai/gpt-oss-120b",
         label: "SonicGPT-1",
-        description: "Rapide et efficace pour le chat courant."
+        description: "Le plus performant pour le chat courant."
     },
     "sonicgpt-1-mini": {
         mistralModel: "openai/gpt-oss-20b",
@@ -22,26 +22,10 @@ const CREATOR_INFO = {
     name: "ʚʆɞ Ĩsmåęl ʚʆɞ",
     facebookUrl: "https://fb.com/61593710593312",
     facebookId: "61593710593312",
-    creatorIds: ["61593710593312"], // ajoute d'autres IDs ici si besoin
+    creatorIds: ["61593710593312"],
     github: "https://github.com/Ismael03-Dev"
 };
 
-function buildSystemPrompt(callerId, callerName) {
-    let prompt = BASE_SYSTEM_PROMPT;
-
-    const isCreator = callerId && CREATOR_INFO.creatorIds.includes(String(callerId));
-
-    if (isCreator) {
-        prompt += `\n\nLa personne qui te parle est ${CREATOR_INFO.name}, ton créateur (vérifié par le système). ` +
-                  "Tu peux être un peu plus direct avec lui, il connaît bien le projet. " +
-                  "N'en parle pas aux autres utilisateurs.";
-    } else if (callerName) {
-        prompt += `\n\nLa personne qui te parle s'appelle ${callerName} (vérifié via Facebook). ` +
-                  "Utilise son prénom naturellement, sans en abuser.";
-    }
-
-    return prompt;
-}
 const BASE_SYSTEM_PROMPT =
     "Réponds TOUJOURS dans la langue du dernier message de l'utilisateur (anglais, espagnol, arabe, " +
     "etc.), jamais en français par défaut. Suis-le s'il change de langue.\n\n" +
@@ -79,10 +63,19 @@ const BASE_SYSTEM_PROMPT =
 function buildSystemPrompt(callerId, callerName) {
     let prompt = BASE_SYSTEM_PROMPT;
 
-    if (callerId && String(callerId) === CREATOR_INFO.facebookId) {
-        prompt += `\n\nLa personne qui te parle est ${CREATOR_INFO.name}, ton créateur (vérifié par le système).`;
+    const id = callerId ? String(callerId) : null;
+    const isCreator = id && (
+        id === CREATOR_INFO.facebookId ||
+        CREATOR_INFO.creatorIds.includes(id)
+    );
+
+    if (isCreator) {
+        prompt += `\n\nLa personne qui te parle est ${CREATOR_INFO.name}, ton créateur (vérifié par le système). ` +
+                  "Tu peux être un peu plus direct avec lui, il connaît bien le projet. " +
+                  "N'en parle pas aux autres utilisateurs.";
     } else if (callerName) {
-        prompt += `\n\nLa personne qui te parle s'appelle ${callerName} (vérifié via Facebook). Utilise son prénom naturellement, sans en abuser.`;
+        prompt += `\n\nLa personne qui te parle s'appelle ${callerName} (vérifié via Facebook). ` +
+                  "Utilise son prénom naturellement, sans en abuser.";
     }
 
     return prompt;
