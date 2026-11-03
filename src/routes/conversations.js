@@ -110,16 +110,15 @@ router.post("/conversations/:id/messages", async (req, res) => {
             webAccess = true,
             callerId,
             callerName,
-            imageUrl,
             imageBase64,
             imageMimeType,
             voiceInput = false
         } = req.body || {};
 
-        const effectiveImageUrl = imageUrl || (imageBase64 ? `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}` : null);
+        const effectiveImageUrl = imageBase64 ? `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}` : null;
 
         if ((!content || typeof content !== "string") && !effectiveImageUrl) {
-            return res.status(400).json({ error: { message: "Le champ 'content', 'imageUrl' ou 'imageBase64' est requis." } });
+            return res.status(400).json({ error: { message: "Le champ 'content' ou 'imageBase64' est requis." } });
         }
 
         const convResult = await db.execute({
@@ -134,7 +133,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const idleMs = Date.now() - lastActivity;
         let lastImageBase64 = conversation.last_image_base64 || null;
         let lastImageMimeType = conversation.last_image_mime || null;
-        let lastImageUrl = conversation.last_image_url || null;
+        
         if (idleMs > IDLE_RESET_MS) {
             await db.execute({
                 sql: "DELETE FROM messages WHERE conversation_id = ?",
@@ -146,17 +145,11 @@ router.post("/conversations/:id/messages", async (req, res) => {
             });
             lastImageBase64 = null;
             lastImageMimeType = null;
-            lastImageUrl = null;
         }
 
-        if (imageUrl) {
-            lastImageUrl = imageUrl;
-            lastImageBase64 = null;
-            lastImageMimeType = null;
-        } else if (imageBase64) {
+        if (imageBase64) {
             lastImageBase64 = imageBase64;
             lastImageMimeType = imageMimeType || "image/jpeg";
-            lastImageUrl = null;
         }
 
         const historyResult = await db.execute({
@@ -198,7 +191,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const activeModel = effectiveImageUrl ? VISION_MODEL : modelConfig.mistralModel;
         const toolsForThisTurn = webAccess ? TOOLS : undefined;
 
-        const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl) => {
+        const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType) => {
             try {
                 const updates = ["updated_at = datetime('now')"];
                 const args = [];
@@ -209,9 +202,6 @@ router.post("/conversations/:id/messages", async (req, res) => {
                 if (newLastImageBase64) {
                     updates.push("last_image_base64 = ?", "last_image_mime = ?", "last_image_url = NULL");
                     args.push(newLastImageBase64, newLastImageMimeType || "image/jpeg");
-                } else if (newLastImageUrl) {
-                    updates.push("last_image_url = ?", "last_image_base64 = NULL", "last_image_mime = NULL");
-                    args.push(newLastImageUrl);
                 }
                 args.push(req.params.id);
                 await db.batch(
@@ -229,7 +219,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
                 );
             } catch (e) {
                 if (e.message && e.message.includes("FOREIGN KEY")) {
-                    console.error(`[finalizeConversation] Conversation ${req.params.id} supprimée entre-temps, sauvegarde ignorée.`);
+                    console.error(`[finalizeConversation] Conversation ${req.params.id} supprimée entre-temps.`);
                     return;
                 }
                 console.error("[finalizeConversation] Erreur inattendue :", e.message);
@@ -261,19 +251,16 @@ router.post("/conversations/:id/messages", async (req, res) => {
                     content: assistantContent,
                     finishReason,
                     lastImageBase64: newLastImageBase64,
-                    lastImageMimeType: newLastImageMimeType,
-                    lastImageUrl: newLastImageUrl
+                    lastImageMimeType: newLastImageMimeType
                 } = await runToolLoop({
                     model: activeModel,
                     messages: fullMessages,
                     tools: toolsForThisTurn,
                     temperature,
                     maxTokens: max_tokens,
-                    toolContext: { lastImageBase64, lastImageMimeType, lastImageUrl },
+                    toolContext: { lastImageBase64, lastImageMimeType },
                     onToolCall: ({ name, args }) => {
-                        res.write(
-                            `data: ${JSON.stringify({ type: "tool_call", tool: name, input: args, done: false })}\n\n`
-                        );
+                        res.write(`data: ${JSON.stringify({ type: "tool_call", tool: name, input: args, done: false })}\n\n`);
                     },
                     onToolResult: ({ name, result }) => {
                         if (result && result.error) {
@@ -301,12 +288,10 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
                 const autoVoice = await maybeAutoVoice(assistantContent, hadAudioAlready);
                 if (autoVoice) {
-                    res.write(
-                        `data: ${JSON.stringify({ type: "media", tool: "generate_voice", mediaType: "audio", base64: autoVoice.base64, mimeType: autoVoice.mimeType, done: false })}\n\n`
-                    );
+                    res.write(`data: ${JSON.stringify({ type: "media", tool: "generate_voice", mediaType: "audio", base64: autoVoice.base64, mimeType: autoVoice.mimeType, done: false })}\n\n`);
                 }
 
-                await finalizeConversation(assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl);
+                await finalizeConversation(assistantContent, newLastImageBase64, newLastImageMimeType);
                 res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason })}\n\n`);
                 res.end();
             } catch (e) {
@@ -325,15 +310,14 @@ router.post("/conversations/:id/messages", async (req, res) => {
             usage,
             toolsUsed,
             lastImageBase64: newLastImageBase64,
-            lastImageMimeType: newLastImageMimeType,
-            lastImageUrl: newLastImageUrl
+            lastImageMimeType: newLastImageMimeType
         } = await runToolLoop({
             model: activeModel,
             messages: fullMessages,
             tools: toolsForThisTurn,
             temperature,
             maxTokens: max_tokens,
-            toolContext: { lastImageBase64, lastImageMimeType, lastImageUrl },
+            toolContext: { lastImageBase64, lastImageMimeType },
             onToolResult: ({ name, result }) => {
                 if (result && result.error) {
                     console.error(`[tool ${name}] échec :`, result.error);
@@ -350,7 +334,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
             mediaResults.push({ tool: "generate_voice", mediaType: "audio", base64: autoVoice.base64, mimeType: autoVoice.mimeType });
         }
 
-        await finalizeConversation(assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl);
+        await finalizeConversation(assistantContent, newLastImageBase64, newLastImageMimeType);
 
         res.json({
             role: "assistant",
