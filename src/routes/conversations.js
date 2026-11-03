@@ -194,7 +194,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         }).catch(e => console.error("[insert user message] échec silencieux :", e.message));
 
         const modelConfig = resolveModel(conversation.model);
-        const VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+        const VISION_MODEL = "qwen/qwen3.8-27b";
         const activeModel = effectiveImageUrl ? VISION_MODEL : modelConfig.mistralModel;
         const toolsForThisTurn = webAccess ? TOOLS : undefined;
 
