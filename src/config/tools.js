@@ -1,6 +1,5 @@
 const { tavilySearch, tavilyExtract } = require("../services/tavily");
 const { generateImage, editImage } = require("../services/cloudflare");
-const { editImageViaUrl } = require("../services/azadEdit");
 const { generateVoice } = require("../services/ttsEdge");
 
 const TOOLS = [
@@ -133,15 +132,10 @@ async function executeTool(name, rawArgs, context = {}) {
         if (name === "edit_image") {
             if (!args.instruction) return { error: "Le paramètre 'instruction' est requis." };
 
-            if (context.lastImageUrl) {
-                const result = await editImageViaUrl(context.lastImageUrl, args.instruction);
-                return { type: "image", base64: result.base64, mimeType: result.mimeType, prompt: args.instruction };
-            }
-
             if (context.lastImageBase64) {
                 const result = await editImage({
                     base64: context.lastImageBase64,
-                    mimeType: context.lastImageMimeType,
+                    mimeType: context.lastImageMimeType || "image/jpeg",
                     instruction: args.instruction
                 });
                 return { type: "image", base64: result.base64, mimeType: result.mimeType, prompt: args.instruction };
@@ -156,7 +150,7 @@ async function executeTool(name, rawArgs, context = {}) {
         }
         return { error: `Outil inconnu : ${name}` };
     } catch (e) {
-        console.error(`[executeTool] Échec réel de l'outil ${name} :`, e.message, e.stack ? e.stack.split("\n")[0] : "");
+        console.error(`[executeTool] Échec réel de l'outil ${name} :`, e.message);
         if (e.message === "TAVILY_KEY_MISSING") {
             return { error: "La recherche web n'est pas configurée côté serveur (TAVILY_API_KEY manquant)." };
         }
