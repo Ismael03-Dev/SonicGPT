@@ -1,5 +1,7 @@
 const { tavilySearch, tavilyExtract } = require("../services/tavily");
-const { generateImage, editImage } = require("../services/cloudflare");
+const { generateImage } = require("../services/cloudflare");
+const { editImageViaUrl } = require("../services/azadEdit");
+const { uploadBase64ToUrl } = require("../services/imageHost");
 const { generateVoice } = require("../services/ttsEdge");
 
 const TOOLS = [
@@ -7,17 +9,11 @@ const TOOLS = [
         type: "function",
         function: {
             name: "web_search",
-            description:
-                "Recherche des informations à jour sur le web. À utiliser pour toute question sur " +
-                "l'actualité, des événements récents, des prix, des données changeantes, ou tout ce " +
-                "que tu ne peux pas connaître avec certitude à partir de tes seules connaissances.",
+            description: "Recherche des informations à jour sur le web. À utiliser pour toute question sur l'actualité, des événements récents, des prix, des données changeantes, ou tout ce que tu ne peux pas connaître avec certitude à partir de tes seules connaissances.",
             parameters: {
                 type: "object",
                 properties: {
-                    query: {
-                        type: "string",
-                        description: "La requête de recherche, dans la langue la plus adaptée au sujet."
-                    }
+                    query: { type: "string", description: "La requête de recherche." }
                 },
                 required: ["query"]
             }
@@ -31,10 +27,7 @@ const TOOLS = [
             parameters: {
                 type: "object",
                 properties: {
-                    url: {
-                        type: "string",
-                        description: "L'URL complète de la page à lire, incluant https://"
-                    }
+                    url: { type: "string", description: "L'URL complète de la page à lire." }
                 },
                 required: ["url"]
             }
@@ -44,17 +37,11 @@ const TOOLS = [
         type: "function",
         function: {
             name: "generate_image",
-            description:
-                "Génère une image à partir d'une description textuelle et la montre à l'utilisateur. " +
-                "Utilise cet outil chaque fois qu'on te demande une image, un dessin, une illustration, " +
-                "ou chaque fois que ça a du sens naturellement dans la conversation.",
+            description: "Génère une image à partir d'une description textuelle et la montre à l'utilisateur.",
             parameters: {
                 type: "object",
                 properties: {
-                    prompt: {
-                        type: "string",
-                        description: "Description détaillée de l'image, de préférence en anglais pour de meilleurs résultats."
-                    }
+                    prompt: { type: "string", description: "Description détaillée de l'image en anglais." }
                 },
                 required: ["prompt"]
             }
@@ -64,18 +51,11 @@ const TOOLS = [
         type: "function",
         function: {
             name: "edit_image",
-            description:
-                "Modifie la dernière image de la conversation (une photo envoyée par l'utilisateur OU " +
-                "une image que tu as générée) à partir d'une consigne texte (ajoute un chapeau, change " +
-                "le style, change le fond...). Utilise cet outil quand on te demande de modifier, " +
-                "retoucher ou changer une image déjà montrée dans la conversation.",
+            description: "Modifie la dernière image de la conversation à partir d'une consigne texte.",
             parameters: {
                 type: "object",
                 properties: {
-                    instruction: {
-                        type: "string",
-                        description: "Description de la modification à apporter à l'image."
-                    }
+                    instruction: { type: "string", description: "Description de la modification." }
                 },
                 required: ["instruction"]
             }
@@ -85,21 +65,12 @@ const TOOLS = [
         type: "function",
         function: {
             name: "generate_voice",
-            description:
-                "Convertit du texte en message vocal audio et l'envoie à l'utilisateur. Utilise cet " +
-                "outil quand on te demande explicitement de parler, répondre en vocal, en audio, ou " +
-                "avec une voix.",
+            description: "Convertit du texte en message vocal audio et l'envoie à l'utilisateur.",
             parameters: {
                 type: "object",
                 properties: {
-                    text: {
-                        type: "string",
-                        description: "Le texte à convertir en voix, dans la langue de la conversation."
-                    },
-                    lang: {
-                        type: "string",
-                        description: "Code langue à deux lettres correspondant à la langue du texte (fr, en, es, ar, pt, etc.). Toujours fournir ce paramètre pour que la prononciation soit correcte."
-                    }
+                    text: { type: "string", description: "Le texte à convertir." },
+                    lang: { type: "string", description: "Code langue (fr, en, es, ar...)." }
                 },
                 required: ["text", "lang"]
             }
@@ -133,15 +104,12 @@ async function executeTool(name, rawArgs, context = {}) {
             if (!args.instruction) return { error: "Le paramètre 'instruction' est requis." };
 
             if (context.lastImageBase64) {
-                const result = await editImage({
-                    base64: context.lastImageBase64,
-                    mimeType: context.lastImageMimeType || "image/jpeg",
-                    instruction: args.instruction
-                });
+                const hostedUrl = await uploadBase64ToUrl(context.lastImageBase64, context.lastImageMimeType || "image/jpeg");
+                const result = await editImageViaUrl(hostedUrl, args.instruction);
                 return { type: "image", base64: result.base64, mimeType: result.mimeType, prompt: args.instruction };
             }
 
-            return { error: "Aucune image récente à modifier. Envoie une photo ou génère d'abord une image." };
+            return { error: "Aucune image récente à modifier." };
         }
         if (name === "generate_voice") {
             if (!args.text) return { error: "Le paramètre 'text' est requis." };
@@ -150,12 +118,18 @@ async function executeTool(name, rawArgs, context = {}) {
         }
         return { error: `Outil inconnu : ${name}` };
     } catch (e) {
-        console.error(`[executeTool] Échec réel de l'outil ${name} :`, e.message);
+        console.error(`[executeTool] Échec de l'outil ${name} :`, e.message);
         if (e.message === "TAVILY_KEY_MISSING") {
-            return { error: "La recherche web n'est pas configurée côté serveur (TAVILY_API_KEY manquant)." };
+            return { error: "La recherche web n'est pas configurée." };
         }
         if (e.message === "CLOUDFLARE_KEY_MISSING") {
-            return { error: "La génération d'image n'est pas configurée côté serveur (CF_ACCOUNT_ID/CF_API_TOKEN manquant)." };
+            return { error: "La génération d'image n'est pas configurée." };
+        }
+        if (e.message.startsWith("UPLOAD_")) {
+            return { error: `Impossible d'héberger l'image pour l'édition : ${e.message}` };
+        }
+        if (e.message.startsWith("AZAD_EDIT_")) {
+            return { error: `L'éditeur d'image a échoué : ${e.message}` };
         }
         return { error: `Échec de l'outil ${name} : ${e.message}` };
     }
