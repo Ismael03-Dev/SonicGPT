@@ -10,12 +10,14 @@ async function uploadBase64ToUrl(base64, mimeType = "image/jpeg") {
         cleanBase64 = cleanBase64.split(",")[1];
     }
 
+    const buffer = Buffer.from(cleanBase64, "base64");
+    const blob = new Blob([buffer], { type: mimeType });
+
     const form = new FormData();
-    form.append("key", IMGBB_API_KEY);
-    form.append("image", cleanBase64);
+    form.append("image", blob, `sonic_${Date.now()}.jpg`);
     form.append("expiration", "300");
 
-    const response = await fetch(IMGBB_URL, {
+    const response = await fetch(`${IMGBB_URL}?key=${IMGBB_API_KEY}`, {
         method: "POST",
         body: form
     });
