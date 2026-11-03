@@ -194,7 +194,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         }).catch(e => console.error("[insert user message] échec silencieux :", e.message));
 
         const modelConfig = resolveModel(conversation.model);
-        const VISION_MODEL = "qwen/qwen3.8-27b";
+        const VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
         const activeModel = effectiveImageUrl ? VISION_MODEL : modelConfig.mistralModel;
         const toolsForThisTurn = webAccess ? TOOLS : undefined;
 
@@ -276,6 +276,9 @@ router.post("/conversations/:id/messages", async (req, res) => {
                         );
                     },
                     onToolResult: ({ name, result }) => {
+                        if (result && result.error) {
+                            console.error(`[tool ${name}] échec :`, result.error);
+                        }
                         if ((name === "generate_image" || name === "generate_voice" || name === "edit_image") && result && result.base64) {
                             if (name === "generate_voice") hadAudioAlready = true;
                             res.write(
@@ -303,9 +306,9 @@ router.post("/conversations/:id/messages", async (req, res) => {
                     );
                 }
 
+                await finalizeConversation(assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl);
                 res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason })}\n\n`);
                 res.end();
-                await finalizeConversation(assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl);
             } catch (e) {
                 console.error(e);
                 res.write(`data: ${JSON.stringify({ type: "error", error: "Erreur du modèle.", done: true })}\n\n`);
@@ -332,6 +335,9 @@ router.post("/conversations/:id/messages", async (req, res) => {
             maxTokens: max_tokens,
             toolContext: { lastImageBase64, lastImageMimeType, lastImageUrl },
             onToolResult: ({ name, result }) => {
+                if (result && result.error) {
+                    console.error(`[tool ${name}] échec :`, result.error);
+                }
                 if ((name === "generate_image" || name === "generate_voice" || name === "edit_image") && result && result.base64) {
                     if (name === "generate_voice") hadAudioAlready = true;
                     mediaResults.push({ tool: name, mediaType: result.type, base64: result.base64, mimeType: result.mimeType });
