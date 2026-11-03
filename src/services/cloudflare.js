@@ -42,6 +42,15 @@ async function editImage({ base64, mimeType, instruction }) {
     const { accountId, apiToken } = getCloudflareConfig();
     const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${EDIT_MODEL}`;
 
+    let cleanBase64 = base64;
+    if (cleanBase64 && cleanBase64.includes(",")) {
+        cleanBase64 = cleanBase64.split(",")[1];
+    }
+    console.log("[cloudflare edit] base64 length:", cleanBase64 ? cleanBase64.length : "NULL");
+    if (!cleanBase64) {
+        throw new Error("CLOUDFLARE_EDIT_EMPTY_BASE64");
+    }
+
     const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -50,7 +59,7 @@ async function editImage({ base64, mimeType, instruction }) {
         },
         body: JSON.stringify({
             prompt: instruction,
-            image_b64: base64,
+            image_b64: cleanBase64,
             strength: 0.65,
             num_steps: 20
         })
