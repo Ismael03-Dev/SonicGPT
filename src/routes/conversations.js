@@ -106,7 +106,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
             content,
             stream = true,
             temperature = 0.7,
-            max_tokens = 400,
+            max_tokens = 250,
             webAccess = true,
             callerId,
             callerName,
@@ -160,11 +160,11 @@ router.post("/conversations/:id/messages", async (req, res) => {
         }
 
         const historyResult = await db.execute({
-            sql: "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 6",
+            sql: "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 3",
             args: [req.params.id]
         });
         const history = historyResult.rows
-            .map(r => ({ role: r.role, content: String(r.content).slice(0, 600) }))
+            .map(r => ({ role: r.role, content: String(r.content).slice(0, 300) }))
             .reverse();
 
         const countResult = await db.execute({
