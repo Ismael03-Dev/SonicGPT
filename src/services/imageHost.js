@@ -1,18 +1,21 @@
-const CATBOX_URL = "https://catbox.moe/user/api.php";
+const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
+const IMGBB_URL = "https://api.imgbb.com/1/upload";
 
 async function uploadBase64ToUrl(base64, mimeType = "image/jpeg") {
     if (!base64) throw new Error("UPLOAD_NO_BASE64");
+    if (!IMGBB_API_KEY) throw new Error("IMGBB_KEY_MISSING");
 
-    const buffer = Buffer.from(base64, "base64");
-    const ext = (mimeType || "image/jpeg").split("/")[1] || "jpg";
-    const filename = `sonicgpt_${Date.now()}.${ext}`;
+    let cleanBase64 = base64;
+    if (cleanBase64.includes(",")) {
+        cleanBase64 = cleanBase64.split(",")[1];
+    }
 
-    const blob = new Blob([buffer], { type: mimeType });
     const form = new FormData();
-    form.append("reqtype", "fileupload");
-    form.append("fileToUpload", blob, filename);
+    form.append("key", IMGBB_API_KEY);
+    form.append("image", cleanBase64);
+    form.append("expiration", "300");
 
-    const response = await fetch(CATBOX_URL, {
+    const response = await fetch(IMGBB_URL, {
         method: "POST",
         body: form
     });
@@ -22,11 +25,11 @@ async function uploadBase64ToUrl(base64, mimeType = "image/jpeg") {
         throw new Error(`UPLOAD_ERROR_${response.status}: ${text.slice(0, 200)}`);
     }
 
-    const url = (await response.text()).trim();
-    if (!/^https?:\/\//i.test(url)) {
-        throw new Error(`UPLOAD_BAD_RESPONSE: ${url.slice(0, 200)}`);
+    const json = await response.json();
+    if (!json.success || !json.data?.url) {
+        throw new Error(`UPLOAD_BAD_RESPONSE: ${JSON.stringify(json).slice(0, 200)}`);
     }
-    return url;
+    return json.data.url;
 }
 
 module.exports = { uploadBase64ToUrl };
