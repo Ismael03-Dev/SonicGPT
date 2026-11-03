@@ -29,7 +29,12 @@ async function fetchWithRetry(body, maxRetries = 3) {
         lastError = new Error(`Groq API error ${response.status}: ${errText}`);
 
         if (attempt < maxRetries) {
-            const waitMs = response.status === 503 ? 1500 * (attempt + 1) : 1000 * (attempt + 1);
+            let waitMs = 2000 * Math.pow(2, attempt);
+            const retryAfter = response.headers.get("retry-after");
+            if (retryAfter) {
+                const parsed = parseFloat(retryAfter);
+                if (!isNaN(parsed)) waitMs = Math.max(waitMs, parsed * 1000 + 500);
+            }
             console.error(`[groq] ${response.status} reçu, nouvelle tentative dans ${waitMs}ms (essai ${attempt + 1}/${maxRetries})`);
             await sleep(waitMs);
         }
@@ -99,7 +104,6 @@ async function streamMistralChat({ model, messages, temperature = 0.7, maxTokens
                     onDelta(delta);
                 }
             } catch (e) {
-                // ignore
             }
         }
     }
