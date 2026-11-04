@@ -132,6 +132,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const IDLE_RESET_MS = 5 * 60 * 1000;
         const lastActivity = new Date(conversation.updated_at.replace(" ", "T") + "Z").getTime();
         const idleMs = Date.now() - lastActivity;
+        
         let lastImageBase64 = conversation.last_image_base64 || null;
         let lastImageMimeType = conversation.last_image_mime || null;
         let lastImageUrl = conversation.last_image_url || null;
@@ -161,11 +162,11 @@ router.post("/conversations/:id/messages", async (req, res) => {
         }
 
         const historyResult = await db.execute({
-            sql: "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 3",
+            sql: "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 6",
             args: [req.params.id]
         });
         const history = historyResult.rows
-            .map(r => ({ role: r.role, content: String(r.content).slice(0, 300) }))
+            .map(r => ({ role: r.role, content: String(r.content).slice(0, 600) }))
             .reverse();
 
         const countResult = await db.execute({
@@ -189,10 +190,10 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
         const storedUserContent = effectiveImageUrl ? `[Image] ${content || ""}`.trim() : content;
 
-        db.execute({
+        await db.execute({
             sql: "INSERT INTO messages (conversation_id, role, content) VALUES (?, 'user', ?)",
             args: [req.params.id, storedUserContent]
-        }).catch(e => console.error("[insert user message] échec silencieux :", e.message));
+        });
 
         const modelConfig = resolveModel(conversation.model);
         const VISION_MODELS = ["qwen/qwen3.8-27b", "meta-llama/llama-4-scout-17b-16e-instruct"];
