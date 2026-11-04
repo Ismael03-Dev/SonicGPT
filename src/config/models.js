@@ -19,7 +19,7 @@ const MODELS = {
 const DEFAULT_MODEL = "sonicgpt-1";
 
 const CREATOR_INFO = {
-    name: "ʚʆɞ Ĩsmåęl ʚʆɞ",
+    name: "Daniel Ismaël",
     facebookUrl: "https://fb.com/61593710593312",
     facebookId: "61593710593312",
     creatorIds: ["61593710593312"],
