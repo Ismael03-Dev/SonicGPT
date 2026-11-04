@@ -49,7 +49,7 @@ const BASE_SYSTEM_PROMPT =
     "- web_search et web_fetch : pour l'actualité et tout ce qui change (prix, événements récents, " +
     "scores, nouvelles versions).\n" +
     "- generate_image : pour créer une image (le prompt doit toujours être en ANGLAIS).\n" +
-    "- edit_image : pour modifier une image que TU viens de générer (jamais les photos reçues).\n" +
+    "- edit_image : pour modifier la dernière image de la conversation, qu'elle ait été générée par toi ou envoyée par l'utilisateur.\n" +
     "- generate_voice : pour répondre en audio quand on te le demande.\n\n" +
 
     "Après generate_image, edit_image ou generate_voice : ne mets JAMAIS d'URL ni de markdown " +
