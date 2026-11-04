@@ -3,7 +3,7 @@ const { executeTool } = require("../config/tools");
 
 const MAX_TOOL_STEPS = 4;
 
-async function runToolLoop({ models, messages, tools, temperature, maxTokens, onToolCall, onToolResult, toolContext = {} }) {
+async function runToolLoop({ models, messages, tools, temperature, maxTokens, toolChoice, onToolCall, onToolResult, toolContext = {} }) {
     let workingMessages = [...messages];
     const context = { ...toolContext };
     const modelList = Array.isArray(models) ? models : [models];
@@ -18,6 +18,7 @@ async function runToolLoop({ models, messages, tools, temperature, maxTokens, on
                     model: modelName,
                     messages: workingMessages,
                     tools,
+                    toolChoice: step === 0 ? toolChoice : "auto", // Force seulement au 1er tour
                     temperature,
                     maxTokens
                 });
@@ -47,11 +48,7 @@ async function runToolLoop({ models, messages, tools, temperature, maxTokens, on
 
                 if (onToolCall) {
                     let parsedArgs = {};
-                    try {
-                        parsedArgs = JSON.parse(toolArgs || "{}");
-                    } catch (e) {
-                        parsedArgs = {};
-                    }
+                    try { parsedArgs = JSON.parse(toolArgs || "{}"); } catch (e) { parsedArgs = {}; }
                     onToolCall({ name: toolName, args: parsedArgs });
                 }
 
@@ -91,7 +88,7 @@ async function runToolLoop({ models, messages, tools, temperature, maxTokens, on
     }
 
     return {
-        content: "Je n'ai pas réussi à obtenir une réponse claire après plusieurs recherches. Peux-tu reformuler ta question ?",
+        content: "Je n'ai pas réussi à obtenir une réponse claire. Peux-tu reformuler ?",
         finishReason: "length",
         usage: null,
         toolsUsed: true,
