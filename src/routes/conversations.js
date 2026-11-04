@@ -129,39 +129,42 @@ router.post("/conversations/:id/messages", async (req, res) => {
         if (forceImageTool && webAccess) {
             console.log("[DIRECT IMAGE] Court-circuit activé pour:", content);
             
-            res.setHeader("Content-Type", "text/event-stream");
-            res.setHeader("Cache-Control", "no-cache");
-            res.setHeader("Connection", "keep-alive");
-            res.flushHeaders();
-
             try {
                 const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: content }), { lastImageBase64, lastImageMimeType });
                 
-                console.log("[DIRECT IMAGE] Retour de executeTool :", JSON.stringify({
-                    aBase64: !!toolResult?.base64,
-                    length: toolResult?.base64 ? toolResult.base64.length : 0,
-                    error: toolResult?.error || null,
-                    type: toolResult?.type || null
-                }));
-
                 if (toolResult && toolResult.base64) {
-                    res.write(`data: ${JSON.stringify({ type: "media", tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType, done: false })}\n\n`);
-                    res.write(`data: ${JSON.stringify({ type: "delta", delta: "Tiens, voici ton image ! 🎨", done: false })}\n\n`);
                     await finalizeConversation("Tiens, voici ton image ! 🎨", toolResult.base64, toolResult.mimeType, null);
+                    
+                    if (stream) {
+                        res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache"); res.setHeader("Connection", "keep-alive"); res.flushHeaders();
+                        res.write(`data: ${JSON.stringify({ type: "media", tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType, done: false })}\n\n`);
+                        res.write(`data: ${JSON.stringify({ type: "delta", delta: "Tiens, voici ton image ! 🎨", done: false })}\n\n`);
+                        res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason: "stop" })}\n\n`); 
+                        res.end();
+                    } else {
+                        res.json({ role: "assistant", content: "Tiens, voici ton image ! 🎨", media: [{ tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType }] });
+                    }
                 } else {
-                    const errorMsg = toolResult?.error || "Erreur inconnue (pas de base64 renvoyé)";
+                    const errorMsg = toolResult?.error || "Erreur inconnue";
                     console.error("[DIRECT IMAGE] Échec:", errorMsg);
-                    res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, done: true })}\n\n`);
-                    res.write(`data: ${JSON.stringify({ type: "delta", delta: `❌ Impossible de générer l'image. Détail : ${errorMsg}`, done: false })}\n\n`);
+                    if (stream) {
+                        res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache"); res.setHeader("Connection", "keep-alive"); res.flushHeaders();
+                        res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, done: true })}\n\n`); 
+                        res.end();
+                    } else {
+                        res.status(500).json({ error: { message: errorMsg } });
+                    }
                 }
-                
-                res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason: "stop" })}\n\n`);
-                res.end();
             } catch (e) {
                 console.error("[DIRECT IMAGE] Exception:", e.message);
-                res.write(`data: ${JSON.stringify({ type: "error", error: e.message, done: true })}\n\n`);
-                res.write(`data: ${JSON.stringify({ type: "delta", delta: `❌ Exception : ${e.message}`, done: false })}\n\n`);
-                res.end();
+                if (!res.headersSent) {
+                    if (stream) {
+                        res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache"); res.setHeader("Connection", "keep-alive"); res.flushHeaders();
+                        res.write(`data: ${JSON.stringify({ type: "error", error: e.message, done: true })}\n\n`); res.end();
+                    } else {
+                        res.status(500).json({ error: { message: e.message } });
+                    }
+                }
             }
             return;
         }
