@@ -100,48 +100,6 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const activeModels = effectiveImageUrl ? VISION_MODELS : [modelConfig.mistralModel];
         const toolsForThisTurn = webAccess ? TOOLS : undefined;
 
-        // COURT-CIRCUIT : Détection d'image et appel direct de l'outil
-        const imageKeywords = /(dessine|génère|genere|crée|cree|image|dessin|illustration|photo)/i;
-        const forceImageTool = imageKeywords.test(content || "");
-        
-        if (forceImageTool && webAccess) {
-            console.log("[DIRECT IMAGE] Court-circuit activé pour:", content);
-            
-            res.setHeader("Content-Type", "text/event-stream");
-            res.setHeader("Cache-Control", "no-cache");
-            res.setHeader("Connection", "keep-alive");
-            res.flushHeaders();
-
-            try {
-                // Appel direct de l'outil generate_image
-                const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: content }), { lastImageBase64, lastImageMimeType });
-                
-                if (toolResult && toolResult.base64) {
-                    // Envoi de l'image via SSE
-                    res.write(`data: ${JSON.stringify({ type: "media", tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType, done: false })}\n\n`);
-                    
-                    // Petit texte d'accompagnement
-                    res.write(`data: ${JSON.stringify({ type: "delta", delta: "Tiens, voici ton image ! 🎨", done: false })}\n\n`);
-                    
-                    // Sauvegarde de l'image
-                    await finalizeConversation("Tiens, voici ton image ! 🎨", toolResult.base64, toolResult.mimeType, null);
-                } else {
-                    const errorMsg = toolResult?.error || "Erreur inconnue";
-                    console.error("[DIRECT IMAGE] Échec:", errorMsg);
-                    res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, done: true })}\n\n`);
-                }
-                
-                res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason: "stop" })}\n\n`);
-                res.end();
-            } catch (e) {
-                console.error("[DIRECT IMAGE] Exception:", e.message);
-                res.write(`data: ${JSON.stringify({ type: "error", error: e.message, done: true })}\n\n`);
-                res.end();
-            }
-            return;
-        }
-
-        // Sinon, comportement normal avec le modèle
         const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl) => {
             try {
                 const updates = ["updated_at = datetime('now')"]; const args = [];
@@ -164,6 +122,40 @@ router.post("/conversations/:id/messages", async (req, res) => {
                 return { base64: result.base64, mimeType: result.mimeType };
             } catch (e) { return null; }
         };
+
+        const imageKeywords = /(dessine|génère|genere|crée|cree|image|dessin|illustration|photo)/i;
+        const forceImageTool = imageKeywords.test(content || "");
+        
+        if (forceImageTool && webAccess) {
+            console.log("[DIRECT IMAGE] Court-circuit activé pour:", content);
+            
+            res.setHeader("Content-Type", "text/event-stream");
+            res.setHeader("Cache-Control", "no-cache");
+            res.setHeader("Connection", "keep-alive");
+            res.flushHeaders();
+
+            try {
+                const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: content }), { lastImageBase64, lastImageMimeType });
+                
+                if (toolResult && toolResult.base64) {
+                    res.write(`data: ${JSON.stringify({ type: "media", tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType, done: false })}\n\n`);
+                    res.write(`data: ${JSON.stringify({ type: "delta", delta: "Tiens, voici ton image ! 🎨", done: false })}\n\n`);
+                    await finalizeConversation("Tiens, voici ton image ! 🎨", toolResult.base64, toolResult.mimeType, null);
+                } else {
+                    const errorMsg = toolResult?.error || "Erreur inconnue";
+                    console.error("[DIRECT IMAGE] Échec:", errorMsg);
+                    res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, done: true })}\n\n`);
+                }
+                
+                res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason: "stop" })}\n\n`);
+                res.end();
+            } catch (e) {
+                console.error("[DIRECT IMAGE] Exception:", e.message);
+                res.write(`data: ${JSON.stringify({ type: "error", error: e.message, done: true })}\n\n`);
+                res.end();
+            }
+            return;
+        }
 
         if (stream) {
             res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache"); res.setHeader("Connection", "keep-alive"); res.flushHeaders();
