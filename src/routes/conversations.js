@@ -131,9 +131,32 @@ router.post("/conversations/:id/messages", async (req, res) => {
             console.log("[DIRECT IMAGE] Court-circuit activé pour:", content);
             
             try {
-                const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: content }), { lastImageBase64, lastImageMimeType });
+                // 1. Générer un prompt propre en anglais
+                let cleanPrompt = content;
+                try {
+                    const promptGen = await callMistralOnce({
+                        model: modelConfig.mistralModel,
+                        messages: [
+                            { role: "system", content: "Tu es un assistant qui transforme une demande d'image en un prompt de génération d'image clair et précis en ANGLAIS. Réponds UNIQUEMENT par le prompt, sans explication, sans guillemets. Sois descriptif et visuel." },
+                            { role: "user", content: content }
+                        ],
+                        temperature: 0.7,
+                        maxTokens: 100
+                    });
+                    if (promptGen && promptGen.message && promptGen.message.content) {
+                        cleanPrompt = promptGen.message.content.trim().replace(/^"|"$/g, '');
+                    }
+                } catch (e) {
+                    console.error("[DIRECT IMAGE] Impossible de générer le prompt propre:", e.message);
+                }
+
+                console.log("[DIRECT IMAGE] Prompt nettoyé:", cleanPrompt);
+
+                // 2. Générer l'image avec le prompt propre
+                const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: cleanPrompt }), { lastImageBase64, lastImageMimeType });
                 
                 if (toolResult && toolResult.base64) {
+                    // 3. Générer un texte de réaction
                     let finalText = "Tiens, voici ton image ! 🎨";
                     try {
                         const reaction = await callMistralOnce({
