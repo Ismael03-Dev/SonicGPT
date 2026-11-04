@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const { db, ensureSchema } = require("../db");
 const { DEFAULT_MODEL, buildSystemPrompt, resolveModel, MODELS } = require("../config/models");
 const { runToolLoop } = require("../services/agent");
-const { TOOLS } = require("../config/tools");
+const { TOOLS, executeTool } = require("../config/tools");
 const { simulateStream } = require("../utils/streamText");
 const { generateVoice } = require("../services/ttsEdge");
 const { detectLanguage } = require("../utils/detectLanguage");
@@ -15,7 +15,6 @@ function makeTitle(text) {
     return clean.length > 60 ? clean.slice(0, 57) + "..." : clean || "Nouvelle conversation";
 }
 
-// ... (les routes POST /conversations, GET, DELETE, GET /:id restent identiques) ...
 router.post("/conversations", async (req, res) => {
     await ensureSchema();
     try {
@@ -59,7 +58,6 @@ router.delete("/conversations/:id", async (req, res) => {
     } catch (e) { console.error(e); res.status(500).json({ error: { message: "Erreur serveur." } }); }
 });
 
-
 router.post("/conversations/:id/messages", async (req, res) => {
     await ensureSchema();
     try {
@@ -102,13 +100,48 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const activeModels = effectiveImageUrl ? VISION_MODELS : [modelConfig.mistralModel];
         const toolsForThisTurn = webAccess ? TOOLS : undefined;
 
-        // DÉTECTION POUR FORCER L'OUTIL
+        // COURT-CIRCUIT : Détection d'image et appel direct de l'outil
         const imageKeywords = /(dessine|génère|genere|crée|cree|image|dessin|illustration|photo)/i;
         const forceImageTool = imageKeywords.test(content || "");
-        const toolChoice = forceImageTool ? "required" : "auto";
+        
+        if (forceImageTool && webAccess) {
+            console.log("[DIRECT IMAGE] Court-circuit activé pour:", content);
+            
+            res.setHeader("Content-Type", "text/event-stream");
+            res.setHeader("Cache-Control", "no-cache");
+            res.setHeader("Connection", "keep-alive");
+            res.flushHeaders();
 
-        console.log("[DEBUG WEB] webAccess:", webAccess, "| outils:", toolsForThisTurn ? "OUI" : "NON", "| toolChoice:", toolChoice, "| modèle:", activeModels[0]);
+            try {
+                // Appel direct de l'outil generate_image
+                const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: content }), { lastImageBase64, lastImageMimeType });
+                
+                if (toolResult && toolResult.base64) {
+                    // Envoi de l'image via SSE
+                    res.write(`data: ${JSON.stringify({ type: "media", tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType, done: false })}\n\n`);
+                    
+                    // Petit texte d'accompagnement
+                    res.write(`data: ${JSON.stringify({ type: "delta", delta: "Tiens, voici ton image ! 🎨", done: false })}\n\n`);
+                    
+                    // Sauvegarde de l'image
+                    await finalizeConversation("Tiens, voici ton image ! 🎨", toolResult.base64, toolResult.mimeType, null);
+                } else {
+                    const errorMsg = toolResult?.error || "Erreur inconnue";
+                    console.error("[DIRECT IMAGE] Échec:", errorMsg);
+                    res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, done: true })}\n\n`);
+                }
+                
+                res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason: "stop" })}\n\n`);
+                res.end();
+            } catch (e) {
+                console.error("[DIRECT IMAGE] Exception:", e.message);
+                res.write(`data: ${JSON.stringify({ type: "error", error: e.message, done: true })}\n\n`);
+                res.end();
+            }
+            return;
+        }
 
+        // Sinon, comportement normal avec le modèle
         const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl) => {
             try {
                 const updates = ["updated_at = datetime('now')"]; const args = [];
@@ -137,7 +170,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
             let hadAudioAlready = false;
             try {
                 const { content: assistantContent, finishReason, lastImageBase64: newLastImageBase64, lastImageMimeType: newLastImageMimeType, lastImageUrl: newLastImageUrl } = await runToolLoop({
-                    models: activeModels, messages: fullMessages, tools: toolsForThisTurn, toolChoice, temperature, maxTokens: max_tokens,
+                    models: activeModels, messages: fullMessages, tools: toolsForThisTurn, toolChoice: "auto", temperature, maxTokens: max_tokens,
                     toolContext: { lastImageBase64, lastImageMimeType, lastImageUrl },
                     onToolCall: ({ name, args }) => { res.write(`data: ${JSON.stringify({ type: "tool_call", tool: name, input: args, done: false })}\n\n`); },
                     onToolResult: ({ name, result }) => {
@@ -162,7 +195,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const mediaResults = [];
         let hadAudioAlready = false;
         const { content: assistantContent, finishReason, usage, toolsUsed, lastImageBase64: newLastImageBase64, lastImageMimeType: newLastImageMimeType, lastImageUrl: newLastImageUrl } = await runToolLoop({
-            models: activeModels, messages: fullMessages, tools: toolsForThisTurn, toolChoice, temperature, maxTokens: max_tokens,
+            models: activeModels, messages: fullMessages, tools: toolsForThisTurn, toolChoice: "auto", temperature, maxTokens: max_tokens,
             toolContext: { lastImageBase64, lastImageMimeType, lastImageUrl },
             onToolResult: ({ name, result }) => {
                 if (result && result.error) console.error(`[tool ${name}] échec :`, result.error);
