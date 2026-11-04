@@ -437,7 +437,7 @@ async function sendMessage() {
 
     try {
         const convId = await ensureConversation();
-        const payload = { content: text, stream: true, callerId: ownerId, webAccess: true };
+        const payload = { content: text, stream: false, callerId: ownerId, webAccess: true };
         if (image) {
             payload.imageBase64 = image.base64;
             payload.imageMimeType = image.mimeType;
@@ -449,45 +449,19 @@ async function sendMessage() {
             body: JSON.stringify(payload)
         });
 
-        if (!res.ok || !res.body) throw new Error("Erreur serveur (" + res.status + ")");
+        if (!res.ok) throw new Error("Erreur serveur (" + res.status + ")");
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let botBubble = null;
-        let fullText = "";
+        const data = await res.json();
+        statusEl.remove();
 
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const parts = buffer.split("\\n\\n");
-            buffer = parts.pop();
+        const botBubble = addBubble("bot", "");
+        if (data.content) {
+            botBubble.innerHTML = renderMarkdown(data.content);
+        }
 
-            for (const part of parts) {
-                const line = part.trim();
-                if (!line.startsWith("data:")) continue;
-                const data = line.slice(5).trim();
-                if (!data) continue;
-                let json;
-                try { json = JSON.parse(data); } catch (e) { continue; }
-
-                if (json.type === "tool_call") {
-                    statusEl.lastChild.textContent = "🛠️ " + json.tool + "...";
-                } else if (json.type === "delta") {
-                    if (!botBubble) { statusEl.remove(); botBubble = addBubble("bot", ""); }
-                    fullText += json.delta;
-                    botBubble.innerHTML = renderMarkdown(fullText);
-                    messagesEl.scrollTop = messagesEl.scrollHeight;
-                } else if (json.type === "media") {
-                    if (!botBubble) { statusEl.remove(); botBubble = addBubble("bot", ""); }
-                    addMedia(botBubble, json.mediaType, json.base64, json.mimeType);
-                } else if (json.type === "done") {
-                    if (statusEl.parentNode) statusEl.remove();
-                } else if (json.type === "error") {
-                    if (statusEl.parentNode) statusEl.remove();
-                    addBubble("bot", "❌ Erreur : " + escapeHtml(json.error || "problème inconnu"));
-                }
+        if (data.media && data.media.length > 0) {
+            for (const m of data.media) {
+                addMedia(botBubble, m.mediaType, m.base64, m.mimeType);
             }
         }
     } catch (e) {
