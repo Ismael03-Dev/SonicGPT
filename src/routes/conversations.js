@@ -200,6 +200,9 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const activeModels = effectiveImageUrl ? VISION_MODELS : [modelConfig.mistralModel];
         const toolsForThisTurn = webAccess ? TOOLS : undefined;
 
+        // AJOUT DU LOG DE DEBUG
+        console.log("[DEBUG WEB] webAccess:", webAccess, "| outils:", toolsForThisTurn ? "OUI" : "NON", "| modèle:", activeModels[0]);
+
         const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl) => {
             try {
                 const updates = ["updated_at = datetime('now')"];
