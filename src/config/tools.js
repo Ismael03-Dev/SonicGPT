@@ -103,6 +103,11 @@ async function executeTool(name, rawArgs, context = {}) {
         if (name === "edit_image") {
             if (!args.instruction) return { error: "Le paramètre 'instruction' est requis." };
 
+            if (context.lastImageUrl) {
+                const result = await editImageViaUrl(context.lastImageUrl, args.instruction);
+                return { type: "image", base64: result.base64, mimeType: result.mimeType, prompt: args.instruction };
+            }
+
             if (context.lastImageBase64) {
                 const hostedUrl = await uploadBase64ToUrl(context.lastImageBase64, context.lastImageMimeType || "image/jpeg");
                 const result = await editImageViaUrl(hostedUrl, args.instruction);
