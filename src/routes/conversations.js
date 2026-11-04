@@ -7,6 +7,7 @@ const { TOOLS, executeTool } = require("../config/tools");
 const { simulateStream } = require("../utils/streamText");
 const { generateVoice } = require("../services/ttsEdge");
 const { detectLanguage } = require("../utils/detectLanguage");
+const { callMistralOnce } = require("../services/mistral");
 
 const router = express.Router();
 
@@ -133,20 +134,37 @@ router.post("/conversations/:id/messages", async (req, res) => {
                 const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: content }), { lastImageBase64, lastImageMimeType });
                 
                 if (toolResult && toolResult.base64) {
-                    await finalizeConversation("Tiens, voici ton image ! 🎨", toolResult.base64, toolResult.mimeType, null);
+                    let finalText = "Tiens, voici ton image ! 🎨";
+                    try {
+                        const reaction = await callMistralOnce({
+                            model: modelConfig.mistralModel,
+                            messages: [
+                                { role: "system", content: "Tu es SonicGPT. L'utilisateur vient de te demander une image. Tu viens de la générer. Écris une phrase courte et naturelle (max 15 mots) pour accompagner l'image, avec un emoji si pertinent. Ne dis pas 'voici l'image', sois créatif." },
+                                { role: "user", content: `J'ai demandé : "${content}". Fais un petit commentaire sympa sur l'image.` }
+                            ],
+                            temperature: 0.8,
+                            maxTokens: 50
+                        });
+                        if (reaction && reaction.message && reaction.message.content) {
+                            finalText = reaction.message.content.trim();
+                        }
+                    } catch (e) {
+                        console.error("[DIRECT IMAGE] Impossible de générer le texte de réaction:", e.message);
+                    }
+
+                    await finalizeConversation(finalText, toolResult.base64, toolResult.mimeType, null);
                     
                     if (stream) {
                         res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache"); res.setHeader("Connection", "keep-alive"); res.flushHeaders();
                         res.write(`data: ${JSON.stringify({ type: "media", tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType, done: false })}\n\n`);
-                        res.write(`data: ${JSON.stringify({ type: "delta", delta: "Tiens, voici ton image ! 🎨", done: false })}\n\n`);
+                        res.write(`data: ${JSON.stringify({ type: "delta", delta: finalText, done: false })}\n\n`);
                         res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason: "stop" })}\n\n`); 
                         res.end();
                     } else {
-                        res.json({ role: "assistant", content: "Tiens, voici ton image ! 🎨", media: [{ tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType }] });
+                        res.json({ role: "assistant", content: finalText, media: [{ tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType }] });
                     }
                 } else {
                     const errorMsg = toolResult?.error || "Erreur inconnue";
-                    console.error("[DIRECT IMAGE] Échec:", errorMsg);
                     if (stream) {
                         res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache"); res.setHeader("Connection", "keep-alive"); res.flushHeaders();
                         res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, done: true })}\n\n`); 
