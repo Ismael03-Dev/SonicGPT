@@ -13,7 +13,11 @@ function isImageBuffer(buffer) {
 
 async function editImageViaUrl(imageUrl, prompt) {
     const params = new URLSearchParams({ url: imageUrl, prompt });
-    const response = await fetch(`${EDITOR_URL}?${params.toString()}`);
+    
+    
+    const response = await fetch(`${EDITOR_URL}?${params.toString()}`, {
+        signal: AbortSignal.timeout(60000)
+    });
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -30,7 +34,9 @@ async function editImageViaUrl(imageUrl, prompt) {
 
     const nextUrl = json?.url || json?.image || json?.result || json?.data || json?.output;
     if (nextUrl && /^https?:\/\//i.test(String(nextUrl))) {
-        const imgResponse = await fetch(nextUrl);
+        const imgResponse = await fetch(nextUrl, {
+            signal: AbortSignal.timeout(30000)
+        });
         if (!imgResponse.ok) {
             throw new Error(`AZAD_EDIT_FOLLOWUP_ERROR_${imgResponse.status}`);
         }
