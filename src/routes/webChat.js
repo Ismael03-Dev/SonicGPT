@@ -207,9 +207,31 @@ function renderChatPage() {
         transition: opacity 0.15s;
     }
     #sendBtn:disabled { opacity: 0.5; cursor: default; }
+    
+    /* Style pour les logs de debug */
+    #debugBox {
+        position: fixed;
+        bottom: 80px;
+        left: 10px;
+        right: 10px;
+        background: rgba(0,0,0,0.8);
+        color: #0f0;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 10px;
+        border-radius: 8px;
+        z-index: 9999;
+        max-height: 150px;
+        overflow-y: auto;
+        display: none;
+        white-space: pre-wrap;
+    }
 </style>
 </head>
 <body>
+
+<!-- Boîte de debug -->
+<div id="debugBox"></div>
 
 <header id="mainHeader">
     <div class="brand">
@@ -236,6 +258,17 @@ function renderChatPage() {
 </div>
 
 <script>
+// Système de log visuel
+const debugBox = document.getElementById("debugBox");
+function debugLog(msg) {
+    debugBox.style.display = "block";
+    debugBox.textContent += "> " + msg + "\n";
+    debugBox.scrollTop = debugBox.scrollHeight;
+}
+window.onerror = function(msg, url, line) {
+    debugLog("ERREUR: " + msg + " (ligne " + line + ")");
+};
+
 const els = {
     messages: document.getElementById("messages"),
     textInput: document.getElementById("textInput"),
@@ -265,13 +298,20 @@ const state = {
 };
 
 function initOwner() {
+    debugLog("Initialisation de l'owner...");
     let ownerId = localStorage.getItem("sonicgpt_owner_id");
     if (!ownerId) {
-        ownerId = "web-" + crypto.randomUUID();
+        try {
+            ownerId = "web-" + crypto.randomUUID();
+        } catch (e) {
+            ownerId = "web-" + Date.now() + "-" + Math.random().toString(36).substring(2);
+            debugLog("crypto.randomUUID non supporté, fallback utilisé.");
+        }
         localStorage.setItem("sonicgpt_owner_id", ownerId);
     }
     state.ownerId = ownerId;
     state.conversationId = localStorage.getItem("sonicgpt_conversation_id") || null;
+    debugLog("Owner ID: " + state.ownerId);
 }
 
 function escapeHtml(str) {
@@ -303,7 +343,7 @@ function renderMath(element) {
                 throwOnError: false
             });
         } catch (e) {
-            console.error("Erreur KaTeX :", e);
+            debugLog("Erreur KaTeX: " + e.message);
         }
     }
 }
@@ -357,6 +397,7 @@ function blobToBase64(blob) {
 
 async function ensureConversation() {
     if (state.conversationId) return state.conversationId;
+    debugLog("Création d'une nouvelle conversation...");
     const res = await fetch("/public/v1/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -364,11 +405,12 @@ async function ensureConversation() {
     });
     if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error("Création de la conversation impossible (" + res.status + ") " + text.slice(0, 80));
+        throw new Error("Création impossible (" + res.status + ") " + text.slice(0, 80));
     }
     const data = await res.json();
     state.conversationId = data.id;
     localStorage.setItem("sonicgpt_conversation_id", state.conversationId);
+    debugLog("Conversation créée: " + state.conversationId);
     return state.conversationId;
 }
 
@@ -393,8 +435,12 @@ async function sendAudioMessage(blob) {
 }
 
 async function sendMessage() {
+    debugLog("Clic sur Envoyer détecté.");
     const text = els.textInput.value.trim();
-    if (!text && !state.pendingImage && !state.pendingAudioBlob) return;
+    if (!text && !state.pendingImage && !state.pendingAudioBlob) {
+        debugLog("Texte vide, abandon.");
+        return;
+    }
 
     if (state.pendingAudioBlob) {
         const blob = state.pendingAudioBlob;
@@ -422,6 +468,7 @@ async function sendMessage() {
 
     try {
         const convId = await ensureConversation();
+        debugLog("Envoi de la requête à l'API...");
         const payload = { content: text, stream: false, callerId: state.ownerId, webAccess: true, source: "web" };
         if (image) {
             payload.imageBase64 = image.base64;
@@ -440,6 +487,7 @@ async function sendMessage() {
         }
 
         const data = await res.json();
+        debugLog("Réponse reçue de l'API.");
         statusEl.remove();
 
         const botBubble = addBubble("bot", "");
@@ -451,6 +499,7 @@ async function sendMessage() {
             for (const m of data.media) addMedia(botBubble, m.mediaType, m.base64, m.mimeType);
         }
     } catch (e) {
+        debugLog("Erreur lors de l'envoi: " + e.message);
         if (statusEl.parentNode) statusEl.remove();
         addErrorBubble("❌ " + e.message);
     } finally {
@@ -567,6 +616,7 @@ async function toggleRecording() {
 }
 
 function bindEvents() {
+    debugLog("Attachement des événements...");
     els.sendBtn.addEventListener("click", sendMessage);
     els.textInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendMessage(); });
     els.resetBtn.addEventListener("click", handleReset);
@@ -577,9 +627,11 @@ function bindEvents() {
 }
 
 function boot() {
+    debugLog("Démarrage de l'application...");
     initOwner();
     bindEvents();
     els.textInput.focus();
+    debugLog("Prêt !");
 }
 
 window.addEventListener("load", boot);
