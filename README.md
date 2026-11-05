@@ -1,181 +1,118 @@
 
----
+```markdown
+# SonicGPT API
 
-SonicGPT API
+Backend d'IA conversationnelle propulsé par Groq et Mistral, avec une interface web intégrée, un support complet de la vision (analyse d'images), de la génération et de l'édition d'images, ainsi que de la voix (synthèse et transcription). Le tout est accessible via une API compatible avec le format OpenAI.
 
-Backend d'IA conversationnelle, propulsé par Mistral AI, avec une interface propre
-(format proche d'OpenAI) pour que n'importe quel client (site web, app mobile, bot) puisse
-discuter avec "SonicGPT" — streaming des réponses inclus, comme ChatGPT ou Claude.
+## 🚀 Fonctionnalités
 
-Stack
+- **Chat conversationnel** avec mémoire de 5 minutes par utilisateur.
+- **Vision** : le modèle peut analyser les images que l'utilisateur envoie.
+- **Génération d'images** : création d'images à partir de descriptions textuelles (via Cloudflare Workers AI).
+- **Édition d'images** : modification d'images existantes (via une API tierce).
+- **Synthèse vocale** : le bot peut répondre en audio (via Edge TTS).
+- **Transcription audio** : le bot peut comprendre les messages vocaux (via Cloudflare STT).
+- **Accès web** : le modèle peut chercher des informations en ligne (via Tavily).
+- **Interface Web** : une page de chat complète, accessible directement à la racine du site.
 
-· Node.js + Express
-· Turso (libSQL) — persistance des conversations, compatible serverless/Vercel
-· Mistral AI comme moteur, appelé côté serveur uniquement (ta clé Mistral n'est jamais exposée)
+## 🛠 Stack Technique
 
-1. Créer la base Turso
+- **Node.js + Express** : serveur HTTP.
+- **Turso (libSQL)** : base de données serverless pour stocker les conversations.
+- **Groq** : moteur d'inférence pour le chat et la vision (modèles `gpt-oss` et `qwen`).
+- **Cloudflare Workers AI** : génération d'images (FLUX).
+- **API tierce** : édition d'images.
+- **Edge TTS** : synthèse vocale.
+- **Tavily** : recherche web.
+- **Vercel** : hébergement serverless.
+
+## 📦 Installation locale
+
+1. **Cloner le dépôt**
+   ```bash
+   git clone https://github.com/Ismael03-Dev/SonicGPT
+   cd SonicGPT
+```
+
+2. Installer les dépendances
+   ```bash
+   npm install
+   ```
+3. Configurer les variables d'environnement
+   ```bash
+   cp .env.example .env
+   ```
+   Remplis les variables dans .env (voir la section "Variables d'environnement" ci-dessous).
+4. Lancer le serveur
+   ```bash
+   npm run dev
+   ```
+   Le serveur sera accessible sur http://localhost:3000.
+
+🔑 Variables d'environnement
+
+Variable Description Requis
+TURSO_DATABASE_URL URL de la base Turso ✅
+TURSO_AUTH_TOKEN Token d'authentification Turso ✅
+GROQ_API_KEY Clé API Groq (pour le chat et la vision) ✅
+CF_ACCOUNT_ID ID de compte Cloudflare (pour la génération d'images) ✅
+CF_API_TOKEN Token API Cloudflare ✅
+TAVILY_API_KEY Clé API Tavily (pour la recherche web) ⚠️ Recommandé
+IMGBB_API_KEY Clé API ImgBB (pour l'hébergement temporaire avant édition) ⚠️ Recommandé
+SONICGPT_API_KEY Clé secrète pour authentifier les requêtes API ✅
+
+📡 Endpoints de l'API
+
+Route compatible OpenAI (stateless)
+
+POST /v1/chat/completions
+Permet d'utiliser SonicGPT comme n'importe quel modèle OpenAI, sans gestion de conversation côté serveur.
+
+Routes avec conversations persistées
+
+· POST /v1/conversations : crée une nouvelle conversation.
+· GET /v1/conversations : liste les conversations (filtre par ownerId).
+· GET /v1/conversations/:id : récupère l'historique d'une conversation.
+· DELETE /v1/conversations/:id : supprime une conversation.
+· POST /v1/conversations/:id/messages : envoie un message et reçoit la réponse (supporte le SSE).
+
+Routes média
+
+· POST /v1/images/generations : génère une image.
+· POST /v1/images/edit : modifie une image.
+· POST /v1/voice/generations : génère un message vocal.
+· POST /v1/audio/transcriptions : transcrit un fichier audio.
+
+🖥 Interface Web
+
+Une interface de chat complète est disponible à la racine du site (/). Elle permet de :
+
+· Discuter avec SonicGPT.
+· Envoyer des images pour analyse.
+· Générer et éditer des images.
+· Enregistrer et envoyer des messages vocaux.
+
+🔒 Sécurité
+
+· Ne jamais exposer GROQ_API_KEY ou CF_API_TOKEN côté client. Elles sont utilisées uniquement dans les variables d'environnement du serveur.
+· Rate limiting : le middleware publicRateLimit protège les routes publiques (/public/v1/*).
+· Modération : il est recommandé d'ajouter un filtre de contenu si l'application est ouverte au public.
+
+🧪 Tests
+
+Pour tester l'API, tu peux utiliser curl :
 
 ```bash
-curl -sSfL https://get.tur.so/install.sh | bash
-turso auth login
-turso db create sonicgpt
-turso db show sonicgpt --url        # -> TURSO_DATABASE_URL
-turso db tokens create sonicgpt     # -> TURSO_AUTH_TOKEN
-```
-
-Le schéma (conversations, messages) se crée automatiquement au premier appel.
-
-2. Configuration
-
-```bash
-cp .env.example .env
-```
-
-Remplis dans .env :
-
-· MISTRAL_API_KEY — ta clé prise sur console.mistral.ai
-· SONICGPT_API_KEY — une clé que tu inventes toi-même (longue chaîne aléatoire), c'est celle que tes utilisateurs/clients utiliseront pour appeler ton API. Génère-en une avec openssl rand -hex 32.
-· TURSO_DATABASE_URL / TURSO_AUTH_TOKEN
-· TAVILY_API_KEY — crée un compte gratuit sur app.tavily.com, copie la clé depuis le dashboard (1000 requêtes/mois gratuites, sans carte bancaire). Sans cette clé, l'IA répond uniquement de mémoire et ignore les demandes de recherche web.
-
-```bash
-npm install
-npm run dev
-# -> http://localhost:3000
-```
-
-3. Déploiement sur Vercel
-
-```bash
-npm i -g vercel
-vercel
-```
-
-Ajoute les mêmes variables d'environnement dans Settings → Environment Variables sur le dashboard Vercel, puis :
-
-```bash
-vercel --prod
-```
-
-Authentification
-
-Toutes les routes /v1/* demandent ta clé SONICGPT_API_KEY :
-
-```
-Authorization: Bearer ta-cle-sonicgpt
-```
-
-(ou header x-api-key en alternative)
-
-Modèles disponibles
-
-Nom public Modèle Mistral sous-jacent Usage
-sonicgpt-1 mistral-large-latest Le plus performant
-sonicgpt-1-mini mistral-small-latest Rapide, économique
-sonicgpt-1-code codestral-latest Génération de code
-
-GET /v1/models renvoie cette liste au format JSON.
-
-Route A — Compatible OpenAI (stateless)
-
-Pour un usage classique façon ChatGPT/Claude API : le client garde l'historique et le renvoie à chaque appel.
-
-```bash
-curl https://ton-projet.vercel.app/v1/chat/completions \
-  -H "Authorization: Bearer ta-cle-sonicgpt" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "sonicgpt-1",
-    "messages": [{"role": "user", "content": "Salut, tu es qui ?"}],
-    "stream": false
-  }'
-```
-
-Avec "stream": true, la réponse est envoyée en Server-Sent Events (SSE), morceau par morceau, format identique à celui d'OpenAI (data: {...}\n\n, terminé par data: [DONE]\n\n).
-
-Route B — Conversations persistées (recommandé pour une vraie app de chat)
-
-```bash
-# 1. Créer une conversation
 curl -X POST https://ton-projet.vercel.app/v1/conversations \
-  -H "Authorization: Bearer ta-cle-sonicgpt" \
+  -H "Authorization: Bearer TA_CLE_SONICGPT" \
   -H "Content-Type: application/json" \
   -d '{"model": "sonicgpt-1", "ownerId": "user_123"}'
-# -> { "id": "uuid-...", "title": "Nouvelle conversation", "model": "sonicgpt-1" }
-
-# 2. Envoyer un message (streaming SSE par défaut)
-curl -N -X POST https://ton-projet.vercel.app/v1/conversations/uuid-.../messages \
-  -H "Authorization: Bearer ta-cle-sonicgpt" \
-  -H "Content-Type: application/json" \
-  -d '{"content": "Explique-moi la relativité en 2 phrases."}'
-
-# 3. Récupérer l'historique complet
-curl https://ton-projet.vercel.app/v1/conversations/uuid-... \
-  -H "Authorization: Bearer ta-cle-sonicgpt"
-
-# 4. Lister les conversations d'un utilisateur
-curl "https://ton-projet.vercel.app/v1/conversations?ownerId=user_123" \
-  -H "Authorization: Bearer ta-cle-sonicgpt"
-
-# 5. Supprimer
-curl -X DELETE https://ton-projet.vercel.app/v1/conversations/uuid-... \
-  -H "Authorization: Bearer ta-cle-sonicgpt"
 ```
 
-Le serveur charge automatiquement tout l'historique de la conversation avant chaque appel à Mistral — le client n'a jamais besoin de renvoyer les messages précédents. Le titre de la conversation se déduit automatiquement du premier message.
+📄 Licence
 
-Accès web (recherche + lecture de pages)
+Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
 
-L'IA peut désormais chercher des informations à jour et lire des pages web avant de répondre, via Tavily. Activé par défaut sur toutes les routes ; désactivable par requête avec "webAccess": false dans le body (réponse plus rapide, mais uniquement à partir des connaissances internes du modèle).
+👤 Auteur
 
-Ce n'est pas une "connexion permanente à l'actualité" comme un fil RSS : à chaque question qui le justifie, le modèle décide lui-même de déclencher une recherche, lit les résultats renvoyés par Tavily, et rédige sa réponse à partir de ça — exactement comme un internaute qui chercherait sur Google puis lirait quelques pages, mais fait automatiquement.
-
-Format du flux SSE (route conversations)
-
-```
-data: {"type": "tool_call", "tool": "web_search", "input": {"query": "..."}, "done": false}
-data: {"type": "delta", "delta": "Bon", "done": false}
-data: {"type": "delta", "delta": "jour", "done": false}
-data: {"type": "delta", "delta": " !", "done": false}
-data: {"type": "done", "done": true, "finishReason": "stop"}
-```
-
-L'événement tool_call n'apparaît que si le modèle a effectivement déclenché une recherche ou une lecture de page — utile pour afficher un indicateur "🔎 Recherche en cours..." côté client. Note : les morceaux de texte (delta) sont désormais envoyés une fois la réponse complète générée (la boucle de recherche doit se terminer avant de pouvoir répondre), puis rejoués progressivement pour garder une sensation de flux fluide côté utilisateur — ce n'est plus un vrai streaming token-par-token comme avant l'ajout de l'accès web.
-
-Exemple client JavaScript (streaming côté front)
-
-```js
-const res = await fetch("https://ton-projet.vercel.app/v1/conversations/ID/messages", {
-    method: "POST",
-    headers: {
-        "Authorization": "Bearer ta-cle-sonicgpt",
-        "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ content: "Bonjour !" })
-});
-
-const reader = res.body.getReader();
-const decoder = new TextDecoder();
-let buffer = "";
-
-while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n\n");
-    buffer = lines.pop();
-    for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const json = JSON.parse(line.slice(6));
-        if (json.type === "tool_call") console.log(`Recherche : ${json.input.query || json.input.url}`);
-        if (json.type === "delta") process.stdout.write(json.delta);
-    }
-}
-```
-
-Sécurité et limites à considérer
-
-· Ne mets jamais MISTRAL_API_KEY dans du code exécuté côté client — elle doit rester uniquement dans les variables d'environnement du serveur. C'est déjà comme ça dans ce projet.
-· Rate limiting : ajoute express-rate-limit par ownerId/IP avant une mise en prod publique, pour éviter qu'un utilisateur épuise ton crédit Mistral.
-· Coûts : chaque appel consomme des tokens sur ta clé Mistral. Surveille ta consommation sur le dashboard Mistral, et envisage de fixer un max_tokens raisonnable par défaut (déjà à 1024 ici).
-· Modération : si l'app est ouverte au public, pense à filtrer les contenus abusifs avant de les persister/renvoyer.
+Ismael (https://github.com/Ismael03-Dev)
