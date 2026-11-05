@@ -18,7 +18,7 @@ function makeTitle(text) {
 
 function detectReasoningEffort(text) {
     const complexKeywords = /(maths?|mathématiques?|équation|calcul|résous|résoudre|démontre|démonstration|physique|chimie|biologie|exercice|problème|théorème|formule|intégrale|dérivée|probabilité|statistique|code|programmation|algorithme|explique|comment fonctionne)/i;
-    return complexKeywords.test(text || "") ? "high" : "low";
+    return complexKeywords.test(text || "") ? "medium" : "low";
 }
 
 router.post("/conversations", async (req, res) => {
@@ -67,7 +67,7 @@ router.delete("/conversations/:id", async (req, res) => {
 router.post("/conversations/:id/messages", async (req, res) => {
     await ensureSchema();
     try {
-        const { content, stream = true, temperature = 0.7, max_tokens = 250, webAccess = true, callerId, callerName, imageUrl, imageBase64, imageMimeType, voiceInput = false, source = "bot" } = req.body || {};
+        const { content, stream = true, temperature = 0.7, max_tokens = 400, webAccess = true, callerId, callerName, imageUrl, imageBase64, imageMimeType, voiceInput = false, source = "bot" } = req.body || {};
         const effectiveImageUrl = imageUrl || (imageBase64 ? `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}` : null);
         if ((!content || typeof content !== "string") && !effectiveImageUrl) return res.status(400).json({ error: { message: "Le champ 'content' est requis." } });
 
@@ -158,8 +158,6 @@ router.post("/conversations/:id/messages", async (req, res) => {
                     console.error("[DIRECT IMAGE] Impossible de générer le prompt propre:", e.message);
                 }
 
-                console.log("[DIRECT IMAGE] Prompt nettoyé:", cleanPrompt);
-
                 const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: cleanPrompt }), { lastImageBase64, lastImageMimeType });
                 
                 if (toolResult && toolResult.base64) {
@@ -168,19 +166,15 @@ router.post("/conversations/:id/messages", async (req, res) => {
                         const reaction = await callMistralOnce({
                             model: modelConfig.mistralModel,
                             messages: [
-                                { role: "system", content: "Tu es SonicGPT. L'utilisateur vient de te demander une image. Tu viens de la générer. Écris une phrase courte et naturelle (max 15 mots) pour accompagner l'image, avec un emoji si pertinent. Ne dis pas 'voici l'image', sois créatif." },
-                                { role: "user", content: `J'ai demandé : "${content}". Fais un petit commentaire sympa sur l'image.` }
+                                { role: "system", content: "Tu es SonicGPT. Écris une phrase courte et naturelle (max 15 mots) pour accompagner l'image, avec un emoji." },
+                                { role: "user", content: `J'ai demandé : "${content}". Fais un petit commentaire sympa.` }
                             ],
                             temperature: 0.8,
                             maxTokens: 50,
                             reasoningEffort: "low"
                         });
-                        if (reaction && reaction.message && reaction.message.content) {
-                            finalText = reaction.message.content.trim();
-                        }
-                    } catch (e) {
-                        console.error("[DIRECT IMAGE] Impossible de générer le texte de réaction:", e.message);
-                    }
+                        if (reaction && reaction.message && reaction.message.content) finalText = reaction.message.content.trim();
+                    } catch (e) {}
 
                     await finalizeConversation(finalText, toolResult.base64, toolResult.mimeType, null);
                     
