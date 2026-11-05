@@ -76,7 +76,7 @@ function renderChatPage() {
         padding: 20px;
         display: flex;
         flex-direction: column;
-        gap: 16px; /* Un peu plus d'espace entre les messages */
+        gap: 16px;
         scroll-behavior: smooth;
     }
     #messages::-webkit-scrollbar { width: 6px; }
@@ -84,9 +84,9 @@ function renderChatPage() {
 
     .bubble {
         max-width: 85%;
-        padding: 4px 0; /* Moins de padding pour le bot */
+        padding: 4px 0;
         line-height: 1.6;
-        font-size: 15px; /* Texte un peu plus grand, comme ChatGPT */
+        font-size: 15px;
         word-wrap: break-word;
         animation: fadeIn 0.15s ease-out;
         overflow-x: auto;
@@ -114,7 +114,6 @@ function renderChatPage() {
     
     .katex-display { margin: 12px 0; overflow-x: auto; overflow-y: hidden; }
     
-    /* L'utilisateur garde sa bulle violette */
     .user { 
         align-self: flex-end; 
         background: var(--accent); 
@@ -124,7 +123,6 @@ function renderChatPage() {
         border-bottom-right-radius: 4px; 
     }
     
-    /* Le bot n'a plus de bulle, comme ChatGPT */
     .bot { 
         align-self: flex-start; 
         background: transparent; 
