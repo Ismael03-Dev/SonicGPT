@@ -16,7 +16,6 @@ function makeTitle(text) {
     return clean.length > 60 ? clean.slice(0, 57) + "..." : clean || "Nouvelle conversation";
 }
 
-// Détection des questions complexes
 function detectReasoningEffort(text) {
     const complexKeywords = /(maths?|mathématiques?|équation|calcul|résous|résoudre|démontre|démonstration|physique|chimie|biologie|exercice|problème|théorème|formule|intégrale|dérivée|probabilité|statistique|code|programmation|algorithme|explique|comment fonctionne)/i;
     return complexKeywords.test(text || "") ? "high" : "low";
@@ -107,7 +106,6 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const activeModels = effectiveImageUrl ? VISION_MODELS : [modelConfig.mistralModel];
         const toolsForThisTurn = webAccess ? TOOLS : undefined;
         
-        // DÉTECTION DU RAISONNEMENT
         const reasoningEffort = detectReasoningEffort(content);
         console.log("[REASONING] Effort pour:", content.slice(0, 50), "=>", reasoningEffort);
 
