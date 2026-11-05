@@ -76,7 +76,7 @@ function renderChatPage() {
         padding: 20px;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 16px; /* Un peu plus d'espace entre les messages */
         scroll-behavior: smooth;
     }
     #messages::-webkit-scrollbar { width: 6px; }
@@ -84,44 +84,59 @@ function renderChatPage() {
 
     .bubble {
         max-width: 85%;
-        padding: 10px 14px;
-        border-radius: 14px;
-        line-height: 1.5;
-        font-size: 14px;
+        padding: 4px 0; /* Moins de padding pour le bot */
+        line-height: 1.6;
+        font-size: 15px; /* Texte un peu plus grand, comme ChatGPT */
         word-wrap: break-word;
         animation: fadeIn 0.15s ease-out;
         overflow-x: auto;
     }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-    .bubble p { margin: 0 0 8px 0; }
+    .bubble p { margin: 0 0 10px 0; }
     .bubble p:last-child { margin-bottom: 0; }
     .bubble code {
         background: rgba(255,255,255,0.08);
-        padding: 1px 5px;
+        padding: 2px 6px;
         border-radius: 4px;
         font-size: 13px;
         font-family: "SF Mono", Consolas, monospace;
     }
     .bubble pre {
         background: #0a0b10;
-        padding: 10px 12px;
+        padding: 12px;
         border-radius: 8px;
         overflow-x: auto;
-        margin: 6px 0;
+        margin: 10px 0;
     }
     .bubble pre code { background: none; padding: 0; }
-    .bubble img { max-width: 260px; border-radius: 10px; display: block; margin-top: 6px; cursor: pointer; }
-    .bubble audio { margin-top: 6px; width: 240px; }
-    .bubble .katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; }
+    .bubble img { max-width: 300px; border-radius: 10px; display: block; margin-top: 10px; cursor: pointer; }
+    .bubble audio { margin-top: 10px; width: 260px; }
     
-    .user { align-self: flex-end; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
-    .bot { align-self: flex-start; background: var(--bg-soft); border-bottom-left-radius: 4px; }
-    .error-bubble { border-left: 3px solid var(--danger); }
+    .katex-display { margin: 12px 0; overflow-x: auto; overflow-y: hidden; }
+    
+    /* L'utilisateur garde sa bulle violette */
+    .user { 
+        align-self: flex-end; 
+        background: var(--accent); 
+        color: white; 
+        padding: 10px 16px;
+        border-radius: 18px;
+        border-bottom-right-radius: 4px; 
+    }
+    
+    /* Le bot n'a plus de bulle, comme ChatGPT */
+    .bot { 
+        align-self: flex-start; 
+        background: transparent; 
+        padding: 4px 0;
+    }
+    
+    .error-bubble { border-left: 3px solid var(--danger); padding-left: 10px; }
 
     .status {
         align-self: flex-start;
         color: #7a7d94;
-        font-size: 12px;
+        font-size: 13px;
         font-style: italic;
         display: flex;
         align-items: center;
@@ -159,9 +174,9 @@ function renderChatPage() {
         background: var(--bg-soft);
         border: 1px solid var(--border-soft);
         color: var(--text);
-        padding: 10px 14px;
-        border-radius: 10px;
-        font-size: 14px;
+        padding: 12px 16px;
+        border-radius: 12px;
+        font-size: 15px;
         outline: none;
         transition: border-color 0.15s;
     }
@@ -170,8 +185,8 @@ function renderChatPage() {
         background: var(--bg-soft);
         border: 1px solid var(--border-soft);
         color: var(--text-muted);
-        width: 38px; height: 38px;
-        border-radius: 10px;
+        width: 42px; height: 42px;
+        border-radius: 12px;
         cursor: pointer;
         font-size: 16px;
         display: flex; align-items: center; justify-content: center;
@@ -185,11 +200,11 @@ function renderChatPage() {
         background: var(--accent);
         border: none;
         color: white;
-        padding: 0 18px;
-        height: 38px;
-        border-radius: 10px;
+        padding: 0 20px;
+        height: 42px;
+        border-radius: 12px;
         cursor: pointer;
-        font-size: 14px;
+        font-size: 15px;
         flex-shrink: 0;
         transition: opacity 0.15s;
     }
@@ -273,11 +288,10 @@ function renderMarkdown(text) {
     escaped = escaped.replace(/\`([^\`]+)\`/g, "<code>$1</code>");
     escaped = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
     escaped = escaped.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>");
-    const paragraphs = escaped.split(/\n\n+/).map(p => "<p>" + p.replace(/\n/g, "<br>") + "</p>");
+    const paragraphs = escaped.split(/\n\n+/).map(p => "<p>" + p + "</p>");
     return paragraphs.join("");
 }
 
-// Fonction pour rendre les maths avec KaTeX (avec vérification de chargement)
 function renderMath(element) {
     if (typeof window.renderMathInElement === "function") {
         try {
@@ -293,9 +307,6 @@ function renderMath(element) {
         } catch (e) {
             console.error("Erreur KaTeX :", e);
         }
-    } else {
-        // Si le script n'est pas encore chargé, on réessaie dans 300ms
-        setTimeout(() => renderMath(element), 300);
     }
 }
 
@@ -436,7 +447,7 @@ async function sendMessage() {
         const botBubble = addBubble("bot", "");
         if (data.content) {
             botBubble.innerHTML = renderMarkdown(data.content);
-            renderMath(botBubble);
+            setTimeout(() => renderMath(botBubble), 50);
         }
         if (data.media && data.media.length > 0) {
             for (const m of data.media) addMedia(botBubble, m.mediaType, m.base64, m.mimeType);
@@ -573,7 +584,7 @@ function boot() {
     els.textInput.focus();
 }
 
-boot();
+window.addEventListener("load", boot);
 </script>
 </body>
 </html>`;
