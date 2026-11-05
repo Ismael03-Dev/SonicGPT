@@ -3,7 +3,7 @@ function renderChatPage() {
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>SonicGPT</title>
 <link rel="icon" type="image/jpeg" href="https://z-p3-cdn.fbsbx.com/v/t59.2708-21/885274190_1173039918622519_8580212649803707836_n.bin/file-1793814546610.bin?_nc_cat=103&ccb=1-7&_nc_sid=2b0e22&_nc_eui2=AeEXCduP0pKwsq73KIPJvpn2_ldEd7otEjz-V0R3ui0SPHW_DiOlZN5p2eRnpe7BYHWE3RqXYtZy3LUnpAw5iBkP&_nc_ohc=l3PdD39J2WIQ7kNvwEQNUPC&_nc_oc=AdpQu_Pkg-JT-dkI1ueTgYPlC8YUBcOCqZFOdYcva_KHXezDXpR_LA2JX-JwyPtQKFE&_nc_ad=z-m&_nc_cid=1400&_nc_zt=7&_nc_ht=z-p3-cdn.fbsbx.com&_nc_gid=k4mkU4OVhdY7J_TYmfK8fA&_nc_ss=7a338&oh=03_Q7cD6wFljDeR-LGHdTunDa7vKQgOjTuKHvGYZmhvJsynymGXHA&oe=6AED3B87&dl=1">
 <meta property="og:title" content="SonicGPT">
@@ -78,6 +78,8 @@ function renderChatPage() {
         flex-direction: column;
         gap: 16px;
         scroll-behavior: smooth;
+        position: relative;
+        z-index: 1;
     }
     #messages::-webkit-scrollbar { width: 6px; }
     #messages::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 3px; }
@@ -139,6 +141,7 @@ function renderChatPage() {
         display: flex;
         align-items: center;
         gap: 6px;
+        pointer-events: none; /* Empêche de bloquer les clics */
     }
     .dots { display: inline-flex; gap: 3px; }
     .dots span {
@@ -166,6 +169,8 @@ function renderChatPage() {
         border-top: 1px solid var(--border);
         flex-shrink: 0;
         align-items: center;
+        position: relative;
+        z-index: 2;
     }
     #textInput {
         flex: 1;
@@ -177,6 +182,7 @@ function renderChatPage() {
         font-size: 15px;
         outline: none;
         transition: border-color 0.15s;
+        -webkit-appearance: none;
     }
     #textInput:focus { border-color: var(--accent); }
     .iconBtn {
@@ -190,6 +196,7 @@ function renderChatPage() {
         display: flex; align-items: center; justify-content: center;
         flex-shrink: 0;
         transition: border-color 0.15s, color 0.15s;
+        -webkit-tap-highlight-color: transparent;
     }
     .iconBtn:hover { border-color: var(--accent); color: var(--text); }
     .iconBtn.recording { background: #ff4d4d; border-color: #ff4d4d; color: white; animation: pulse 1s infinite; }
@@ -205,33 +212,12 @@ function renderChatPage() {
         font-size: 15px;
         flex-shrink: 0;
         transition: opacity 0.15s;
+        -webkit-tap-highlight-color: transparent;
     }
     #sendBtn:disabled { opacity: 0.5; cursor: default; }
-    
-    /* Style pour les logs de debug */
-    #debugBox {
-        position: fixed;
-        bottom: 80px;
-        left: 10px;
-        right: 10px;
-        background: rgba(0,0,0,0.8);
-        color: #0f0;
-        font-family: monospace;
-        font-size: 12px;
-        padding: 10px;
-        border-radius: 8px;
-        z-index: 9999;
-        max-height: 150px;
-        overflow-y: auto;
-        display: none;
-        white-space: pre-wrap;
-    }
 </style>
 </head>
 <body>
-
-<!-- Boîte de debug -->
-<div id="debugBox"></div>
 
 <header id="mainHeader">
     <div class="brand">
@@ -258,17 +244,6 @@ function renderChatPage() {
 </div>
 
 <script>
-// Système de log visuel
-const debugBox = document.getElementById("debugBox");
-function debugLog(msg) {
-    debugBox.style.display = "block";
-    debugBox.textContent += "> " + msg + "\n";
-    debugBox.scrollTop = debugBox.scrollHeight;
-}
-window.onerror = function(msg, url, line) {
-    debugLog("ERREUR: " + msg + " (ligne " + line + ")");
-};
-
 const els = {
     messages: document.getElementById("messages"),
     textInput: document.getElementById("textInput"),
@@ -298,20 +273,17 @@ const state = {
 };
 
 function initOwner() {
-    debugLog("Initialisation de l'owner...");
     let ownerId = localStorage.getItem("sonicgpt_owner_id");
     if (!ownerId) {
         try {
             ownerId = "web-" + crypto.randomUUID();
         } catch (e) {
             ownerId = "web-" + Date.now() + "-" + Math.random().toString(36).substring(2);
-            debugLog("crypto.randomUUID non supporté, fallback utilisé.");
         }
         localStorage.setItem("sonicgpt_owner_id", ownerId);
     }
     state.ownerId = ownerId;
     state.conversationId = localStorage.getItem("sonicgpt_conversation_id") || null;
-    debugLog("Owner ID: " + state.ownerId);
 }
 
 function escapeHtml(str) {
@@ -343,7 +315,7 @@ function renderMath(element) {
                 throwOnError: false
             });
         } catch (e) {
-            debugLog("Erreur KaTeX: " + e.message);
+            console.error("Erreur KaTeX :", e);
         }
     }
 }
@@ -397,7 +369,6 @@ function blobToBase64(blob) {
 
 async function ensureConversation() {
     if (state.conversationId) return state.conversationId;
-    debugLog("Création d'une nouvelle conversation...");
     const res = await fetch("/public/v1/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -405,12 +376,11 @@ async function ensureConversation() {
     });
     if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error("Création impossible (" + res.status + ") " + text.slice(0, 80));
+        throw new Error("Création de la conversation impossible (" + res.status + ") " + text.slice(0, 80));
     }
     const data = await res.json();
     state.conversationId = data.id;
     localStorage.setItem("sonicgpt_conversation_id", state.conversationId);
-    debugLog("Conversation créée: " + state.conversationId);
     return state.conversationId;
 }
 
@@ -435,12 +405,8 @@ async function sendAudioMessage(blob) {
 }
 
 async function sendMessage() {
-    debugLog("Clic sur Envoyer détecté.");
     const text = els.textInput.value.trim();
-    if (!text && !state.pendingImage && !state.pendingAudioBlob) {
-        debugLog("Texte vide, abandon.");
-        return;
-    }
+    if (!text && !state.pendingImage && !state.pendingAudioBlob) return;
 
     if (state.pendingAudioBlob) {
         const blob = state.pendingAudioBlob;
@@ -468,7 +434,6 @@ async function sendMessage() {
 
     try {
         const convId = await ensureConversation();
-        debugLog("Envoi de la requête à l'API...");
         const payload = { content: text, stream: false, callerId: state.ownerId, webAccess: true, source: "web" };
         if (image) {
             payload.imageBase64 = image.base64;
@@ -487,7 +452,6 @@ async function sendMessage() {
         }
 
         const data = await res.json();
-        debugLog("Réponse reçue de l'API.");
         statusEl.remove();
 
         const botBubble = addBubble("bot", "");
@@ -499,7 +463,6 @@ async function sendMessage() {
             for (const m of data.media) addMedia(botBubble, m.mediaType, m.base64, m.mimeType);
         }
     } catch (e) {
-        debugLog("Erreur lors de l'envoi: " + e.message);
         if (statusEl.parentNode) statusEl.remove();
         addErrorBubble("❌ " + e.message);
     } finally {
@@ -616,7 +579,6 @@ async function toggleRecording() {
 }
 
 function bindEvents() {
-    debugLog("Attachement des événements...");
     els.sendBtn.addEventListener("click", sendMessage);
     els.textInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendMessage(); });
     els.resetBtn.addEventListener("click", handleReset);
@@ -627,11 +589,9 @@ function bindEvents() {
 }
 
 function boot() {
-    debugLog("Démarrage de l'application...");
     initOwner();
     bindEvents();
     els.textInput.focus();
-    debugLog("Prêt !");
 }
 
 window.addEventListener("load", boot);
