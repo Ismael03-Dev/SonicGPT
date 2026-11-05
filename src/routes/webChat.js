@@ -13,6 +13,7 @@ function renderChatPage() {
 <meta name="twitter:card" content="summary">
 <meta name="twitter:image" content="https://z-p3-cdn.fbsbx.com/v/t59.2708-21/885274190_1173039918622519_8580212649803707836_n.bin/file-1793814546610.bin?_nc_cat=103&ccb=1-7&_nc_sid=2b0e22&_nc_eui2=AeEXCduP0pKwsq73KIPJvpn2_ldEd7otEjz-V0R3ui0SPHW_DiOlZN5p2eRnpe7BYHWE3RqXYtZy3LUnpAw5iBkP&_nc_ohc=l3PdD39J2WIQ7kNvwEQNUPC&_nc_oc=AdpQu_Pkg-JT-dkI1ueTgYPlC8YUBcOCqZFOdYcva_KHXezDXpR_LA2JX-JwyPtQKFE&_nc_ad=z-m&_nc_cid=1400&_nc_zt=7&_nc_ht=z-p3-cdn.fbsbx.com&_nc_gid=k4mkU4OVhdY7J_TYmfK8fA&_nc_ss=7a338&oh=03_Q7cD6wFljDeR-LGHdTunDa7vKQgOjTuKHvGYZmhvJsynymGXHA&oe=6AED3B87&dl=1">
 
+<!-- KaTeX pour le rendu mathématique -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
@@ -112,8 +113,7 @@ function renderChatPage() {
     .bubble pre code { background: none; padding: 0; }
     .bubble img { max-width: 260px; border-radius: 10px; display: block; margin-top: 6px; cursor: pointer; }
     .bubble audio { margin-top: 6px; width: 240px; }
-    
-    .katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; }
+    .bubble .katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; }
     
     .user { align-self: flex-end; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
     .bot { align-self: flex-start; background: var(--bg-soft); border-bottom-left-radius: 4px; }
@@ -274,21 +274,20 @@ function renderMarkdown(text) {
     escaped = escaped.replace(/\`([^\`]+)\`/g, "<code>$1</code>");
     escaped = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
     escaped = escaped.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>");
-    // On ne remplace plus les \n par des <br> pour les blocs mathématiques
-    const paragraphs = escaped.split(/\n\n+/).map(p => "<p>" + p + "</p>");
+    const paragraphs = escaped.split(/\n\n+/).map(p => "<p>" + p.replace(/\n/g, "<br>") + "</p>");
     return paragraphs.join("");
 }
 
 // Fonction pour rendre les maths avec KaTeX
 function renderMath(element) {
-    if (typeof window.renderMathInElement === "function") {
+    if (window.renderMathInElement) {
         try {
             renderMathInElement(element, {
                 delimiters: [
                     {left: '$$', right: '$$', display: true},
                     {left: '$', right: '$', display: false},
-                    {left: '\\[', right: '\\]', display: true},
-                    {left: '\\(', right: '\\)', display: false}
+                    {left: '\\(', right: '\\)', display: false},
+                    {left: '\\[', right: '\\]', display: true}
                 ],
                 throwOnError: false
             });
@@ -405,7 +404,7 @@ async function sendMessage() {
     els.sendBtn.disabled = true;
 
     const userBubble = addBubble("user", text ? renderMarkdown(text) : "&nbsp;");
-    if (text) renderMath(userBubble);
+    if (text) renderMath(userBubble); // Rendu des maths dans le message utilisateur
     if (image) addMedia(userBubble, "image", image.base64, image.mimeType);
 
     const statusEl = addStatus("SonicGPT réfléchit...");
@@ -435,8 +434,7 @@ async function sendMessage() {
         const botBubble = addBubble("bot", "");
         if (data.content) {
             botBubble.innerHTML = renderMarkdown(data.content);
-            // On attend un tout petit peu que le DOM soit à jour avant de lancer KaTeX
-            setTimeout(() => renderMath(botBubble), 50);
+            renderMath(botBubble); // Rendu des maths dans la réponse du bot
         }
         if (data.media && data.media.length > 0) {
             for (const m of data.media) addMedia(botBubble, m.mediaType, m.base64, m.mimeType);
@@ -573,7 +571,7 @@ function boot() {
     els.textInput.focus();
 }
 
-window.addEventListener("load", boot);
+boot();
 </script>
 </body>
 </html>`;
