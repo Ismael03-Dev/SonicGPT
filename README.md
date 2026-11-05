@@ -1,7 +1,3 @@
-C'est vrai, tu as raison. Dans un fichier Markdown (.md), les ** servent à mettre le texte en gras sur GitHub, mais si tu les vois dans le code brut, c'est un peu "moche" à lire.
-
-Voici le même README, mais sans les astérisques de mise en forme (j'ai gardé les titres avec # pour que la structure reste claire sur GitHub, mais j'ai retiré tout le reste pour que ce soit propre à lire). Tu peux le copier-coller directement.
-
 ```markdown
 # SonicGPT API
 
