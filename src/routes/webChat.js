@@ -13,7 +13,6 @@ function renderChatPage() {
 <meta name="twitter:card" content="summary">
 <meta name="twitter:image" content="https://z-p3-cdn.fbsbx.com/v/t59.2708-21/885274190_1173039918622519_8580212649803707836_n.bin/file-1793814546610.bin?_nc_cat=103&ccb=1-7&_nc_sid=2b0e22&_nc_eui2=AeEXCduP0pKwsq73KIPJvpn2_ldEd7otEjz-V0R3ui0SPHW_DiOlZN5p2eRnpe7BYHWE3RqXYtZy3LUnpAw5iBkP&_nc_ohc=l3PdD39J2WIQ7kNvwEQNUPC&_nc_oc=AdpQu_Pkg-JT-dkI1ueTgYPlC8YUBcOCqZFOdYcva_KHXezDXpR_LA2JX-JwyPtQKFE&_nc_ad=z-m&_nc_cid=1400&_nc_zt=7&_nc_ht=z-p3-cdn.fbsbx.com&_nc_gid=k4mkU4OVhdY7J_TYmfK8fA&_nc_ss=7a338&oh=03_Q7cD6wFljDeR-LGHdTunDa7vKQgOjTuKHvGYZmhvJsynymGXHA&oe=6AED3B87&dl=1">
 
-<!-- KaTeX pour le rendu mathématique -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
@@ -278,22 +277,25 @@ function renderMarkdown(text) {
     return paragraphs.join("");
 }
 
-// Fonction pour rendre les maths avec KaTeX
+// Fonction pour rendre les maths avec KaTeX (avec vérification de chargement)
 function renderMath(element) {
-    if (window.renderMathInElement) {
+    if (typeof window.renderMathInElement === "function") {
         try {
             renderMathInElement(element, {
                 delimiters: [
                     {left: '$$', right: '$$', display: true},
                     {left: '$', right: '$', display: false},
-                    {left: '\\(', right: '\\)', display: false},
-                    {left: '\\[', right: '\\]', display: true}
+                    {left: '\\[', right: '\\]', display: true},
+                    {left: '\\(', right: '\\)', display: false}
                 ],
                 throwOnError: false
             });
         } catch (e) {
             console.error("Erreur KaTeX :", e);
         }
+    } else {
+        // Si le script n'est pas encore chargé, on réessaie dans 300ms
+        setTimeout(() => renderMath(element), 300);
     }
 }
 
@@ -404,7 +406,7 @@ async function sendMessage() {
     els.sendBtn.disabled = true;
 
     const userBubble = addBubble("user", text ? renderMarkdown(text) : "&nbsp;");
-    if (text) renderMath(userBubble); // Rendu des maths dans le message utilisateur
+    if (text) renderMath(userBubble);
     if (image) addMedia(userBubble, "image", image.base64, image.mimeType);
 
     const statusEl = addStatus("SonicGPT réfléchit...");
@@ -434,7 +436,7 @@ async function sendMessage() {
         const botBubble = addBubble("bot", "");
         if (data.content) {
             botBubble.innerHTML = renderMarkdown(data.content);
-            renderMath(botBubble); // Rendu des maths dans la réponse du bot
+            renderMath(botBubble);
         }
         if (data.media && data.media.length > 0) {
             for (const m of data.media) addMedia(botBubble, m.mediaType, m.base64, m.mimeType);
