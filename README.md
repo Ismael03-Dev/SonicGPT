@@ -115,5 +115,3 @@ Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
 Auteur
 
 Ismael (https://github.com/Ismael03-Dev)
-
-```
