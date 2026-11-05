@@ -16,6 +16,12 @@ function makeTitle(text) {
     return clean.length > 60 ? clean.slice(0, 57) + "..." : clean || "Nouvelle conversation";
 }
 
+// Détection des questions complexes
+function detectReasoningEffort(text) {
+    const complexKeywords = /(maths?|mathématiques?|équation|calcul|résous|résoudre|démontre|démonstration|physique|chimie|biologie|exercice|problème|théorème|formule|intégrale|dérivée|probabilité|statistique|code|programmation|algorithme|explique|comment fonctionne)/i;
+    return complexKeywords.test(text || "") ? "high" : "low";
+}
+
 router.post("/conversations", async (req, res) => {
     await ensureSchema();
     try {
@@ -100,6 +106,10 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const VISION_MODELS = ["qwen/qwen3.8-27b", "meta-llama/llama-4-scout-17b-16e-instruct"];
         const activeModels = effectiveImageUrl ? VISION_MODELS : [modelConfig.mistralModel];
         const toolsForThisTurn = webAccess ? TOOLS : undefined;
+        
+        // DÉTECTION DU RAISONNEMENT
+        const reasoningEffort = detectReasoningEffort(content);
+        console.log("[REASONING] Effort pour:", content.slice(0, 50), "=>", reasoningEffort);
 
         const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl) => {
             try {
@@ -125,8 +135,6 @@ router.post("/conversations/:id/messages", async (req, res) => {
         };
 
         const imageKeywords = /(dessine|génère|genere|crée|cree|image|dessin|illustration|photo)/i;
-        
-        // CONDITION AJOUTÉE : On ne court-circuite QUE si source === "web"
         const forceImageTool = imageKeywords.test(content || "") && source === "web";
         
         if (forceImageTool && webAccess) {
@@ -142,7 +150,8 @@ router.post("/conversations/:id/messages", async (req, res) => {
                             { role: "user", content: content }
                         ],
                         temperature: 0.7,
-                        maxTokens: 100
+                        maxTokens: 100,
+                        reasoningEffort: "low"
                     });
                     if (promptGen && promptGen.message && promptGen.message.content) {
                         cleanPrompt = promptGen.message.content.trim().replace(/^"|"$/g, '');
@@ -165,7 +174,8 @@ router.post("/conversations/:id/messages", async (req, res) => {
                                 { role: "user", content: `J'ai demandé : "${content}". Fais un petit commentaire sympa sur l'image.` }
                             ],
                             temperature: 0.8,
-                            maxTokens: 50
+                            maxTokens: 50,
+                            reasoningEffort: "low"
                         });
                         if (reaction && reaction.message && reaction.message.content) {
                             finalText = reaction.message.content.trim();
@@ -214,7 +224,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
             let hadAudioAlready = false;
             try {
                 const { content: assistantContent, finishReason, lastImageBase64: newLastImageBase64, lastImageMimeType: newLastImageMimeType, lastImageUrl: newLastImageUrl } = await runToolLoop({
-                    models: activeModels, messages: fullMessages, tools: toolsForThisTurn, toolChoice: "auto", temperature, maxTokens: max_tokens,
+                    models: activeModels, messages: fullMessages, tools: toolsForThisTurn, toolChoice: "auto", temperature, maxTokens: max_tokens, reasoningEffort,
                     toolContext: { lastImageBase64, lastImageMimeType, lastImageUrl },
                     onToolCall: ({ name, args }) => { res.write(`data: ${JSON.stringify({ type: "tool_call", tool: name, input: args, done: false })}\n\n`); },
                     onToolResult: ({ name, result }) => {
@@ -239,7 +249,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const mediaResults = [];
         let hadAudioAlready = false;
         const { content: assistantContent, finishReason, usage, toolsUsed, lastImageBase64: newLastImageBase64, lastImageMimeType: newLastImageMimeType, lastImageUrl: newLastImageUrl } = await runToolLoop({
-            models: activeModels, messages: fullMessages, tools: toolsForThisTurn, toolChoice: "auto", temperature, maxTokens: max_tokens,
+            models: activeModels, messages: fullMessages, tools: toolsForThisTurn, toolChoice: "auto", temperature, maxTokens: max_tokens, reasoningEffort,
             toolContext: { lastImageBase64, lastImageMimeType, lastImageUrl },
             onToolResult: ({ name, result }) => {
                 if (result && result.error) console.error(`[tool ${name}] échec :`, result.error);
