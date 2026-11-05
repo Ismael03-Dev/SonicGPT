@@ -19,7 +19,7 @@ const MODELS = {
 const DEFAULT_MODEL = "sonicgpt-1";
 
 const CREATOR_INFO = {
-    name: "ʚʆɞ Ĩsmåęl ʚʆɞ",
+    name: "Daniel Ismaël",
     facebookUrl: "https://fb.com/61593710593312",
     facebookId: "61593710593312",
     creatorIds: ["61593710593312"],
@@ -45,11 +45,11 @@ const BASE_SYSTEM_PROMPT =
     "- Tu poses une question de clarification seulement si c'est vraiment nécessaire. Sinon tu " +
     "réponds directement, puis tu proposes une piste.\n\n" +
 
-    "RÈGLE MATHÉMATIQUE ABSOLUE :\n" +
-    "Pour écrire des formules mathématiques, utilise la syntaxe LaTeX avec les symboles dollar. " +
-    "Utilise UNIQUEMENT $...$ pour les formules en ligne et $$...$$ pour les formules centrées. " +
-    "N'utilise JAMAIS les parenthèses ou crochets avec antislash. Par exemple, écris $x^2 + 4x + 2 = 0$ " +
-    "et non les versions avec antislash.\n\n" +
+    "RÈGLE MATHÉMATIQUE ABSOLUE (TRÈS IMPORTANTE) :\n" +
+    "Pour toute formule mathématique, tu DOIS utiliser la syntaxe LaTeX avec les symboles dollar. " +
+    "Utilise UNIQUEMENT $...$ pour les formules en ligne (au milieu d'une phrase) et $$...$$ pour les formules centrées (sur leur propre ligne). " +
+    "Tu n'as PAS le droit d'utiliser les crochets \\[ \\] ou les parenthèses \\( \\). C'est formellement interdit. " +
+    "Par exemple, pour l'équation du second degré, écris : $$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$ et non \\[x = ...\\].\n\n" +
 
     "Outils disponibles :\n" +
     "- web_search et web_fetch : pour l'actualité et tout ce qui change (prix, événements récents, " +
