@@ -12,6 +12,12 @@ function renderChatPage() {
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:image" content="https://z-p3-cdn.fbsbx.com/v/t59.2708-21/885274190_1173039918622519_8580212649803707836_n.bin/file-1793814546610.bin?_nc_cat=103&ccb=1-7&_nc_sid=2b0e22&_nc_eui2=AeEXCduP0pKwsq73KIPJvpn2_ldEd7otEjz-V0R3ui0SPHW_DiOlZN5p2eRnpe7BYHWE3RqXYtZy3LUnpAw5iBkP&_nc_ohc=l3PdD39J2WIQ7kNvwEQNUPC&_nc_oc=AdpQu_Pkg-JT-dkI1ueTgYPlC8YUBcOCqZFOdYcva_KHXezDXpR_LA2JX-JwyPtQKFE&_nc_ad=z-m&_nc_cid=1400&_nc_zt=7&_nc_ht=z-p3-cdn.fbsbx.com&_nc_gid=k4mkU4OVhdY7J_TYmfK8fA&_nc_ss=7a338&oh=03_Q7cD6wFljDeR-LGHdTunDa7vKQgOjTuKHvGYZmhvJsynymGXHA&oe=6AED3B87&dl=1">
+
+<!-- KaTeX pour le rendu mathématique -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+
 <style>
     :root {
         --bg: #0f1117;
@@ -78,13 +84,14 @@ function renderChatPage() {
     #messages::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 3px; }
 
     .bubble {
-        max-width: 75%;
+        max-width: 85%;
         padding: 10px 14px;
         border-radius: 14px;
-        line-height: 1.45;
+        line-height: 1.5;
         font-size: 14px;
         word-wrap: break-word;
         animation: fadeIn 0.15s ease-out;
+        overflow-x: auto;
     }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
     .bubble p { margin: 0 0 8px 0; }
@@ -106,6 +113,8 @@ function renderChatPage() {
     .bubble pre code { background: none; padding: 0; }
     .bubble img { max-width: 260px; border-radius: 10px; display: block; margin-top: 6px; cursor: pointer; }
     .bubble audio { margin-top: 6px; width: 240px; }
+    .bubble .katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; }
+    
     .user { align-self: flex-end; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
     .bot { align-self: flex-start; background: var(--bg-soft); border-bottom-left-radius: 4px; }
     .error-bubble { border-left: 3px solid var(--danger); }
@@ -269,6 +278,25 @@ function renderMarkdown(text) {
     return paragraphs.join("");
 }
 
+// Fonction pour rendre les maths avec KaTeX
+function renderMath(element) {
+    if (window.renderMathInElement) {
+        try {
+            renderMathInElement(element, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false},
+                    {left: '\\(', right: '\\)', display: false},
+                    {left: '\\[', right: '\\]', display: true}
+                ],
+                throwOnError: false
+            });
+        } catch (e) {
+            console.error("Erreur KaTeX :", e);
+        }
+    }
+}
+
 function addBubble(role, html, extraClass = "") {
     const el = document.createElement("div");
     el.className = "bubble " + role + (extraClass ? " " + extraClass : "");
@@ -376,6 +404,7 @@ async function sendMessage() {
     els.sendBtn.disabled = true;
 
     const userBubble = addBubble("user", text ? renderMarkdown(text) : "&nbsp;");
+    if (text) renderMath(userBubble); // Rendu des maths dans le message utilisateur
     if (image) addMedia(userBubble, "image", image.base64, image.mimeType);
 
     const statusEl = addStatus("SonicGPT réfléchit...");
@@ -403,7 +432,10 @@ async function sendMessage() {
         statusEl.remove();
 
         const botBubble = addBubble("bot", "");
-        if (data.content) botBubble.innerHTML = renderMarkdown(data.content);
+        if (data.content) {
+            botBubble.innerHTML = renderMarkdown(data.content);
+            renderMath(botBubble); // Rendu des maths dans la réponse du bot
+        }
         if (data.media && data.media.length > 0) {
             for (const m of data.media) addMedia(botBubble, m.mediaType, m.base64, m.mimeType);
         }
