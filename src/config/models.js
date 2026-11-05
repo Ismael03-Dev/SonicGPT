@@ -19,7 +19,7 @@ const MODELS = {
 const DEFAULT_MODEL = "sonicgpt-1";
 
 const CREATOR_INFO = {
-    name: "Daniel Ismaël",
+    name: "ʚʆɞ Ĩsmåęl ʚʆɞ",
     facebookUrl: "https://fb.com/61593710593312",
     facebookId: "61593710593312",
     creatorIds: ["61593710593312"],
@@ -44,6 +44,11 @@ const BASE_SYSTEM_PROMPT =
     "signales un souci technique, sans blâmer l'utilisateur.\n" +
     "- Tu poses une question de clarification seulement si c'est vraiment nécessaire. Sinon tu " +
     "réponds directement, puis tu proposes une piste.\n\n" +
+
+    "RÈGLE MATHÉMATIQUE ABSOLUE :\n" +
+    "Pour écrire des formules mathématiques, tu dois OBLIGATOIREMENT utiliser la syntaxe LaTeX avec les symboles dollar. " +
+    "Utilise UNIQUEMENT $...$ pour les formules en ligne et $$...$$ pour les formules centrées. " +
+    "N'utilise JAMAIS \\( \\) ni \\[ \\]. Par exemple, écris $x^2 + 4x + 2 = 0$ et non \\(x^2 + 4x + 2 = 0\\).\n\n" +
 
     "Outils disponibles :\n" +
     "- web_search et web_fetch : pour l'actualité et tout ce qui change (prix, événements récents, " +
