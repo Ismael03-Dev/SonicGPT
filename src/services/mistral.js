@@ -1,101 +1,60 @@
-const { callMistralOnce } = require("./mistral");
-const { executeTool } = require("../config/tools");
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-const MAX_TOOL_STEPS = 4;
-
-async function runToolLoop({ models, messages, tools, temperature, maxTokens, toolChoice, reasoningEffort, onToolCall, onToolResult, toolContext = {} }) {
-    let workingMessages = [...messages];
-    const context = { ...toolContext };
-    const modelList = Array.isArray(models) ? models : [models];
-
-    for (let step = 0; step < MAX_TOOL_STEPS; step++) {
-        let lastError = null;
-        let result = null;
-
-        for (const modelName of modelList) {
-            try {
-                result = await callMistralOnce({
-                    model: modelName,
-                    messages: workingMessages,
-                    tools,
-                    toolChoice: step === 0 ? toolChoice : "auto",
-                    temperature,
-                    maxTokens,
-                    reasoningEffort: reasoningEffort || "low"
-                });
-                break;
-            } catch (e) {
-                lastError = e;
-                console.error(`[agent] Modèle ${modelName} échoué :`, e.message.slice(0, 150));
-            }
-        }
-
-        if (!result) {
-            throw lastError || new Error("Aucun modèle n'a pu répondre.");
-        }
-
-        const { message, finishReason, usage } = result;
-
-        if (message.tool_calls && message.tool_calls.length > 0) {
-            workingMessages.push({
-                role: "assistant",
-                content: message.content || null,
-                tool_calls: message.tool_calls
-            });
-
-            for (const toolCall of message.tool_calls) {
-                const toolName = toolCall.function.name;
-                const toolArgs = toolCall.function.arguments;
-
-                if (onToolCall) {
-                    let parsedArgs = {};
-                    try { parsedArgs = JSON.parse(toolArgs || "{}"); } catch (e) { parsedArgs = {}; }
-                    onToolCall({ name: toolName, args: parsedArgs });
-                }
-
-                const resultTool = await executeTool(toolName, toolArgs, context);
-
-                if ((toolName === "generate_image" || toolName === "edit_image") && resultTool && resultTool.base64) {
-                    context.lastImageBase64 = resultTool.base64;
-                    context.lastImageMimeType = resultTool.mimeType;
-                }
-
-                if (onToolResult) {
-                    onToolResult({ name: toolName, result: resultTool });
-                }
-
-                const modelFacingResult = resultTool.base64
-                    ? { success: true, type: resultTool.type, note: "Média généré et envoyé automatiquement à l'utilisateur." }
-                    : resultTool;
-
-                workingMessages.push({
-                    role: "tool",
-                    tool_call_id: toolCall.id,
-                    name: toolName,
-                    content: JSON.stringify(modelFacingResult)
-                });
-            }
-            continue;
-        }
-
-        return {
-            content: message.content || "",
-            finishReason,
-            usage,
-            toolsUsed: step > 0,
-            lastImageBase64: context.lastImageBase64 || toolContext.lastImageBase64 || null,
-            lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null
-        };
-    }
-
-    return {
-        content: "Je n'ai pas réussi à obtenir une réponse claire après plusieurs recherches. Peux-tu reformuler ta question ?",
-        finishReason: "length",
-        usage: null,
-        toolsUsed: true,
-        lastImageBase64: context.lastImageBase64 || toolContext.lastImageBase64 || null,
-        lastImageMimeType: context.lastImageMimeType || toolContext.lastImageMimeType || null
-    };
+function buildHeaders() {
+    if (!process.env.GROQ_API_KEY) throw new Error("GROQ_API_KEY manquant.");
+    return { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` };
 }
 
-module.exports = { runToolLoop };
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchWithRetry(body, maxRetries = 1) {
+    let lastError;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const response = await fetch(GROQ_API_URL, { method: "POST", headers: buildHeaders(), body: JSON.stringify(body) });
+        if (response.status !== 429 && response.status !== 503) return response;
+        const errText = await response.text().catch(() => "");
+        lastError = new Error(`Groq API error ${response.status}: ${errText}`);
+        if (attempt < maxRetries) {
+            let waitMs = 2000 * Math.pow(2, attempt);
+            const retryAfter = response.headers.get("retry-after");
+            if (retryAfter) {
+                const parsed = parseFloat(retryAfter);
+                if (!isNaN(parsed)) waitMs = Math.max(waitMs, parsed * 1000 + 500);
+            }
+            await sleep(waitMs);
+        }
+    }
+    throw lastError;
+}
+
+async function callMistralOnce({ model, messages, tools, toolChoice = "auto", temperature = 0.7, maxTokens = 1024, reasoningEffort = "low" }) {
+    const body = { model, messages, temperature, max_tokens: maxTokens, stream: false };
+    
+    // On ne garde que low, medium ou high (valeurs acceptées par Groq)
+    let safeEffort = "low";
+    if (reasoningEffort === "high") safeEffort = "high";
+    else if (reasoningEffort === "medium") safeEffort = "medium";
+
+    if (model.includes("gpt-oss")) {
+        body.reasoning_effort = safeEffort;
+        console.log(`[mistral] reasoning_effort envoyé à Groq: ${safeEffort}`);
+    }
+
+    if (tools && tools.length) {
+        body.tools = tools;
+        body.tool_choice = toolChoice;
+    }
+
+    const response = await fetchWithRetry(body);
+    if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        console.error(`[mistral] Erreur Groq: ${response.status}`, errText.slice(0, 200));
+        throw new Error(`Groq API error ${response.status}: ${errText}`);
+    }
+
+    const json = await response.json();
+    const choice = json.choices?.[0];
+    return { message: choice?.message || {}, finishReason: choice?.finish_reason || "stop", usage: json.usage || null };
+}
+
+module.exports = { callMistralOnce };
