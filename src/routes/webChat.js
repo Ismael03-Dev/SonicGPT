@@ -239,7 +239,10 @@ async function ensureConversation() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "sonicgpt-1", ownerId })
     });
-    if (!res.ok) throw new Error("Impossible de créer la conversation.");
+    if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error("Erreur création conversation : HTTP " + res.status + " - " + text.slice(0, 100));
+    }
     const data = await res.json();
     conversationId = data.id;
     localStorage.setItem("sonicgpt_conversation_id", conversationId);
