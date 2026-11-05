@@ -3,7 +3,7 @@ function renderChatPage() {
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SonicGPT</title>
 <link rel="icon" type="image/jpeg" href="https://z-p3-cdn.fbsbx.com/v/t59.2708-21/885274190_1173039918622519_8580212649803707836_n.bin/file-1793814546610.bin?_nc_cat=103&ccb=1-7&_nc_sid=2b0e22&_nc_eui2=AeEXCduP0pKwsq73KIPJvpn2_ldEd7otEjz-V0R3ui0SPHW_DiOlZN5p2eRnpe7BYHWE3RqXYtZy3LUnpAw5iBkP&_nc_ohc=l3PdD39J2WIQ7kNvwEQNUPC&_nc_oc=AdpQu_Pkg-JT-dkI1ueTgYPlC8YUBcOCqZFOdYcva_KHXezDXpR_LA2JX-JwyPtQKFE&_nc_ad=z-m&_nc_cid=1400&_nc_zt=7&_nc_ht=z-p3-cdn.fbsbx.com&_nc_gid=k4mkU4OVhdY7J_TYmfK8fA&_nc_ss=7a338&oh=03_Q7cD6wFljDeR-LGHdTunDa7vKQgOjTuKHvGYZmhvJsynymGXHA&oe=6AED3B87&dl=1">
 <meta property="og:title" content="SonicGPT">
@@ -78,8 +78,6 @@ function renderChatPage() {
         flex-direction: column;
         gap: 16px;
         scroll-behavior: smooth;
-        position: relative;
-        z-index: 1;
     }
     #messages::-webkit-scrollbar { width: 6px; }
     #messages::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 3px; }
@@ -141,7 +139,6 @@ function renderChatPage() {
         display: flex;
         align-items: center;
         gap: 6px;
-        pointer-events: none; /* Empêche de bloquer les clics */
     }
     .dots { display: inline-flex; gap: 3px; }
     .dots span {
@@ -169,8 +166,6 @@ function renderChatPage() {
         border-top: 1px solid var(--border);
         flex-shrink: 0;
         align-items: center;
-        position: relative;
-        z-index: 2;
     }
     #textInput {
         flex: 1;
@@ -182,7 +177,6 @@ function renderChatPage() {
         font-size: 15px;
         outline: none;
         transition: border-color 0.15s;
-        -webkit-appearance: none;
     }
     #textInput:focus { border-color: var(--accent); }
     .iconBtn {
@@ -196,7 +190,6 @@ function renderChatPage() {
         display: flex; align-items: center; justify-content: center;
         flex-shrink: 0;
         transition: border-color 0.15s, color 0.15s;
-        -webkit-tap-highlight-color: transparent;
     }
     .iconBtn:hover { border-color: var(--accent); color: var(--text); }
     .iconBtn.recording { background: #ff4d4d; border-color: #ff4d4d; color: white; animation: pulse 1s infinite; }
@@ -212,7 +205,6 @@ function renderChatPage() {
         font-size: 15px;
         flex-shrink: 0;
         transition: opacity 0.15s;
-        -webkit-tap-highlight-color: transparent;
     }
     #sendBtn:disabled { opacity: 0.5; cursor: default; }
 </style>
@@ -275,11 +267,7 @@ const state = {
 function initOwner() {
     let ownerId = localStorage.getItem("sonicgpt_owner_id");
     if (!ownerId) {
-        try {
-            ownerId = "web-" + crypto.randomUUID();
-        } catch (e) {
-            ownerId = "web-" + Date.now() + "-" + Math.random().toString(36).substring(2);
-        }
+        ownerId = "web-" + crypto.randomUUID();
         localStorage.setItem("sonicgpt_owner_id", ownerId);
     }
     state.ownerId = ownerId;
