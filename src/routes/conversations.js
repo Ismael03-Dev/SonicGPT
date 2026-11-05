@@ -62,7 +62,7 @@ router.delete("/conversations/:id", async (req, res) => {
 router.post("/conversations/:id/messages", async (req, res) => {
     await ensureSchema();
     try {
-        const { content, stream = true, temperature = 0.7, max_tokens = 250, webAccess = true, callerId, callerName, imageUrl, imageBase64, imageMimeType, voiceInput = false } = req.body || {};
+        const { content, stream = true, temperature = 0.7, max_tokens = 250, webAccess = true, callerId, callerName, imageUrl, imageBase64, imageMimeType, voiceInput = false, source = "bot" } = req.body || {};
         const effectiveImageUrl = imageUrl || (imageBase64 ? `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}` : null);
         if ((!content || typeof content !== "string") && !effectiveImageUrl) return res.status(400).json({ error: { message: "Le champ 'content' est requis." } });
 
@@ -125,13 +125,14 @@ router.post("/conversations/:id/messages", async (req, res) => {
         };
 
         const imageKeywords = /(dessine|génère|genere|crée|cree|image|dessin|illustration|photo)/i;
-        const forceImageTool = imageKeywords.test(content || "");
+        
+        // CONDITION AJOUTÉE : On ne court-circuite QUE si source === "web"
+        const forceImageTool = imageKeywords.test(content || "") && source === "web";
         
         if (forceImageTool && webAccess) {
-            console.log("[DIRECT IMAGE] Court-circuit activé pour:", content);
+            console.log("[DIRECT IMAGE] Court-circuit WEB activé pour:", content);
             
             try {
-                // 1. Générer un prompt propre en anglais
                 let cleanPrompt = content;
                 try {
                     const promptGen = await callMistralOnce({
@@ -152,11 +153,9 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
                 console.log("[DIRECT IMAGE] Prompt nettoyé:", cleanPrompt);
 
-                // 2. Générer l'image avec le prompt propre
                 const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: cleanPrompt }), { lastImageBase64, lastImageMimeType });
                 
                 if (toolResult && toolResult.base64) {
-                    // 3. Générer un texte de réaction
                     let finalText = "Tiens, voici ton image ! 🎨";
                     try {
                         const reaction = await callMistralOnce({
