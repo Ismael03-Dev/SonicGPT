@@ -23,7 +23,13 @@ router.get("/google/callback", async (req, res) => {
 
     try {
         await ensureSchema();
-        const { tokens } = await client.getToken(code);
+        
+        // CORRECTION ICI : on passe le redirect_uri à getToken
+        const { tokens } = await client.getToken({
+            code: code,
+            redirect_uri: "https://sonic-gpt.vercel.app/api/auth/google/callback"
+        });
+        
         client.setCredentials(tokens);
 
         const ticket = await client.verifyIdToken({
