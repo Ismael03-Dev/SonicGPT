@@ -7,12 +7,22 @@ const { db, ensureSchema } = require("../db");
 const router = express.Router();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+// On construit l'URL de redirection dynamiquement
+function getRedirectUri(req) {
+    // Si on est sur Vercel, on force l'URL de prod. Sinon, on utilise l'hôte de la requête.
+    if (process.env.VERCEL_URL) {
+        return `https://${process.env.VERCEL_URL}/api/auth/google/callback`;
+    }
+    return `${req.protocol}://${req.get("host")}/api/auth/google/callback`;
+}
+
 router.get("/google", (req, res) => {
+    const redirectUri = getRedirectUri(req);
     const authorizeUrl = client.generateAuthUrl({
         access_type: "offline",
         scope: ["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"],
         prompt: "consent",
-        redirect_uri: "https://sonic-gpt.vercel.app/api/auth/google/callback"
+        redirect_uri: redirectUri
     });
     res.redirect(authorizeUrl);
 });
@@ -24,10 +34,12 @@ router.get("/google/callback", async (req, res) => {
     try {
         await ensureSchema();
         
-        // CORRECTION ICI : on passe le redirect_uri à getToken
+        const redirectUri = getRedirectUri(req);
+        
+        // On passe un objet avec le code ET l'URL de redirection
         const { tokens } = await client.getToken({
             code: code,
-            redirect_uri: "https://sonic-gpt.vercel.app/api/auth/google/callback"
+            redirect_uri: redirectUri
         });
         
         client.setCredentials(tokens);
@@ -53,7 +65,7 @@ router.get("/google/callback", async (req, res) => {
         res.redirect(`/?token=${token}`);
     } catch (e) {
         console.error("[auth] Erreur Google :", e.message);
-        res.status(500).send("Erreur d'authentification.");
+        res.status(500).send("Erreur d'authentification. Détails : " + e.message); // On affiche l'erreur pour comprendre
     }
 });
 
