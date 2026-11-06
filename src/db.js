@@ -1,9 +1,7 @@
 const { createClient } = require("@libsql/client");
 
 if (!process.env.TURSO_DATABASE_URL) {
-    console.warn(
-        "[db] TURSO_DATABASE_URL manquant. Ajoute tes variables d'env (voir .env.example)."
-    );
+    console.warn("[db] TURSO_DATABASE_URL manquant.");
 }
 
 const db = createClient({
@@ -28,6 +26,13 @@ function ensureSchema() {
         initPromise = db
             .batch(
                 [
+                    `CREATE TABLE IF NOT EXISTS users (
+                        id TEXT PRIMARY KEY,
+                        email TEXT UNIQUE NOT NULL,
+                        name TEXT,
+                        avatar_url TEXT,
+                        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    )`,
                     `CREATE TABLE IF NOT EXISTS conversations (
                         id TEXT PRIMARY KEY,
                         title TEXT NOT NULL DEFAULT 'Nouvelle conversation',
