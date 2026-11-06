@@ -3,7 +3,6 @@ const crypto = require("crypto");
 const { db, ensureSchema } = require("../db");
 const { DEFAULT_MODEL, buildSystemPrompt, resolveModel, MODELS } = require("../config/models");
 const { TOOLS, executeTool } = require("../config/tools");
-const { simulateStream } = require("../utils/streamText");
 const { generateVoice } = require("../services/ttsEdge");
 const { detectLanguage } = require("../utils/detectLanguage");
 const { callMistralOnce } = require("../services/mistral");
@@ -20,6 +19,7 @@ function detectReasoningEffort(text) {
     return complexKeywords.test(text || "") ? "medium" : "low";
 }
 
+// ... (les routes POST /conversations, GET, DELETE, etc. restent identiques)
 router.post("/conversations", async (req, res) => {
     await ensureSchema();
     try {
@@ -128,20 +128,16 @@ router.post("/conversations/:id/messages", async (req, res) => {
             try {
                 let cleanPrompt = content;
                 try {
-                    const promptGen = await callMistralOnce({
-                        model: modelConfig.mistralModel,
-                        messages: [{ role: "system", content: "Tu es un assistant qui transforme une demande d'image en un prompt de génération d'image clair et précis en ANGLAIS." }, { role: "user", content: content }],
-                        temperature: 0.7, maxTokens: 100, reasoningEffort: "low"
-                    });
+                    const promptGen = await callMistralOnce({ model: modelConfig.mistralModel, messages: [{ role: "system", content: "Traduis cette demande d'image en un prompt clair et descriptif en ANGLAIS." }, { role: "user", content: content }], temperature: 0.7, maxTokens: 100, reasoningEffort: "low" });
                     if (promptGen && promptGen.message && promptGen.message.content) cleanPrompt = promptGen.message.content.trim().replace(/^"|"$/g, '');
                 } catch (e) {}
-                
+
                 const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: cleanPrompt }), { lastImageBase64, lastImageMimeType });
                 
                 if (toolResult && toolResult.base64) {
                     let finalText = "Tiens, voici ton image ! 🎨";
                     try {
-                        const reaction = await callMistralOnce({ model: modelConfig.mistralModel, messages: [{ role: "system", content: "Écris une phrase courte et naturelle (max 15 mots) pour accompagner l'image, avec un emoji." }, { role: "user", content: `J'ai demandé : "${content}".` }], temperature: 0.8, maxTokens: 50, reasoningEffort: "low" });
+                        const reaction = await callMistralOnce({ model: modelConfig.mistralModel, messages: [{ role: "system", content: "Écris une phrase courte pour accompagner l'image, avec un emoji." }, { role: "user", content: `J'ai demandé : "${content}".` }], temperature: 0.8, maxTokens: 50, reasoningEffort: "low" });
                         if (reaction && reaction.message && reaction.message.content) finalText = reaction.message.content.trim();
                     } catch (e) {}
 
@@ -167,7 +163,6 @@ router.post("/conversations/:id/messages", async (req, res) => {
             res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache"); res.setHeader("Connection", "keep-alive"); res.flushHeaders();
             let hadAudioAlready = false;
             try {
-                // Ici, on utilise le STREAMING DIRECT de Groq
                 const body = { model: activeModels[0], messages: fullMessages, temperature, max_tokens: max_tokens, stream: true };
                 if (toolsForThisTurn) { body.tools = toolsForThisTurn; body.tool_choice = "auto"; }
                 if (body.model.includes("gpt-oss")) body.reasoning_effort = reasoningEffort;
@@ -218,8 +213,16 @@ router.post("/conversations/:id/messages", async (req, res) => {
             return;
         }
 
-        // Fallback non-streaming (si besoin)
-        res.json({ role: "assistant", content: "Streaming désactivé pour cette requête." });
+        // Si le mode streaming est explicitement désactivé (ex: par un bot), on renvoie du JSON classique
+        try {
+            const result = await callMistralOnce({ model: activeModels[0], messages: fullMessages, tools: toolsForThisTurn, toolChoice: "auto", temperature, maxTokens: max_tokens, reasoningEffort });
+            await finalizeConversation(result.message.content || "", null, null, null);
+            res.json({ role: "assistant", content: result.message.content || "", media: [] });
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ error: { message: "Erreur du modèle." } });
+        }
+
     } catch (e) { console.error(e); res.status(500).json({ error: { message: "Erreur serveur." } }); }
 });
 
