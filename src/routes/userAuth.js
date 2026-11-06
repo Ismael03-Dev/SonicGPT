@@ -11,7 +11,8 @@ router.get("/google", (req, res) => {
     const authorizeUrl = client.generateAuthUrl({
         access_type: "offline",
         scope: ["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"],
-        prompt: "consent"
+        prompt: "consent",
+        redirect_uri: "https://sonic-gpt.vercel.app/api/auth/google/callback"
     });
     res.redirect(authorizeUrl);
 });
