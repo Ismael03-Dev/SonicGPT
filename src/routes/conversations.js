@@ -2,7 +2,6 @@ const express = require("express");
 const crypto = require("crypto");
 const { db, ensureSchema } = require("../db");
 const { DEFAULT_MODEL, buildSystemPrompt, resolveModel, MODELS } = require("../config/models");
-const { runToolLoop } = require("../services/agent");
 const { TOOLS, executeTool } = require("../config/tools");
 const { simulateStream } = require("../utils/streamText");
 const { generateVoice } = require("../services/ttsEdge");
@@ -107,7 +106,6 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const toolsForThisTurn = webAccess ? TOOLS : undefined;
         
         const reasoningEffort = detectReasoningEffort(content);
-        console.log("[REASONING] Effort pour:", content.slice(0, 50), "=>", reasoningEffort);
 
         const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl) => {
             try {
@@ -123,90 +121,44 @@ router.post("/conversations/:id/messages", async (req, res) => {
             }
         };
 
-        const maybeAutoVoice = async (assistantContent, hadAudioAlready) => {
-            if (!voiceInput || hadAudioAlready || !assistantContent) return null;
-            try {
-                const lang = detectLanguage(assistantContent);
-                const result = await generateVoice({ text: assistantContent, lang });
-                return { base64: result.base64, mimeType: result.mimeType };
-            } catch (e) { return null; }
-        };
-
         const imageKeywords = /(dessine|génère|genere|crée|cree|image|dessin|illustration|photo)/i;
         const forceImageTool = imageKeywords.test(content || "") && source === "web";
-        
+
         if (forceImageTool && webAccess) {
-            console.log("[DIRECT IMAGE] Court-circuit WEB activé pour:", content);
-            
             try {
                 let cleanPrompt = content;
                 try {
                     const promptGen = await callMistralOnce({
                         model: modelConfig.mistralModel,
-                        messages: [
-                            { role: "system", content: "Tu es un assistant qui transforme une demande d'image en un prompt de génération d'image clair et précis en ANGLAIS. Réponds UNIQUEMENT par le prompt, sans explication, sans guillemets. Sois descriptif et visuel." },
-                            { role: "user", content: content }
-                        ],
-                        temperature: 0.7,
-                        maxTokens: 100,
-                        reasoningEffort: "low"
+                        messages: [{ role: "system", content: "Tu es un assistant qui transforme une demande d'image en un prompt de génération d'image clair et précis en ANGLAIS." }, { role: "user", content: content }],
+                        temperature: 0.7, maxTokens: 100, reasoningEffort: "low"
                     });
-                    if (promptGen && promptGen.message && promptGen.message.content) {
-                        cleanPrompt = promptGen.message.content.trim().replace(/^"|"$/g, '');
-                    }
-                } catch (e) {
-                    console.error("[DIRECT IMAGE] Impossible de générer le prompt propre:", e.message);
-                }
-
+                    if (promptGen && promptGen.message && promptGen.message.content) cleanPrompt = promptGen.message.content.trim().replace(/^"|"$/g, '');
+                } catch (e) {}
+                
                 const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: cleanPrompt }), { lastImageBase64, lastImageMimeType });
                 
                 if (toolResult && toolResult.base64) {
                     let finalText = "Tiens, voici ton image ! 🎨";
                     try {
-                        const reaction = await callMistralOnce({
-                            model: modelConfig.mistralModel,
-                            messages: [
-                                { role: "system", content: "Tu es SonicGPT. Écris une phrase courte et naturelle (max 15 mots) pour accompagner l'image, avec un emoji." },
-                                { role: "user", content: `J'ai demandé : "${content}". Fais un petit commentaire sympa.` }
-                            ],
-                            temperature: 0.8,
-                            maxTokens: 50,
-                            reasoningEffort: "low"
-                        });
+                        const reaction = await callMistralOnce({ model: modelConfig.mistralModel, messages: [{ role: "system", content: "Écris une phrase courte et naturelle (max 15 mots) pour accompagner l'image, avec un emoji." }, { role: "user", content: `J'ai demandé : "${content}".` }], temperature: 0.8, maxTokens: 50, reasoningEffort: "low" });
                         if (reaction && reaction.message && reaction.message.content) finalText = reaction.message.content.trim();
                     } catch (e) {}
 
                     await finalizeConversation(finalText, toolResult.base64, toolResult.mimeType, null);
-                    
                     if (stream) {
                         res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache"); res.setHeader("Connection", "keep-alive"); res.flushHeaders();
                         res.write(`data: ${JSON.stringify({ type: "media", tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType, done: false })}\n\n`);
                         res.write(`data: ${JSON.stringify({ type: "delta", delta: finalText, done: false })}\n\n`);
-                        res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason: "stop" })}\n\n`); 
-                        res.end();
-                    } else {
-                        res.json({ role: "assistant", content: finalText, media: [{ tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType }] });
-                    }
+                        res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason: "stop" })}\n\n`); res.end();
+                    } else { res.json({ role: "assistant", content: finalText, media: [{ tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType }] }); }
                 } else {
                     const errorMsg = toolResult?.error || "Erreur inconnue";
-                    if (stream) {
-                        res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache"); res.setHeader("Connection", "keep-alive"); res.flushHeaders();
-                        res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, done: true })}\n\n`); 
-                        res.end();
-                    } else {
-                        res.status(500).json({ error: { message: errorMsg } });
-                    }
+                    if (stream) { res.setHeader("Content-Type", "text/event-stream"); res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, done: true })}\n\n`); res.end(); }
+                    else { res.status(500).json({ error: { message: errorMsg } }); }
                 }
             } catch (e) {
-                console.error("[DIRECT IMAGE] Exception:", e.message);
-                if (!res.headersSent) {
-                    if (stream) {
-                        res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache"); res.setHeader("Connection", "keep-alive"); res.flushHeaders();
-                        res.write(`data: ${JSON.stringify({ type: "error", error: e.message, done: true })}\n\n`); res.end();
-                    } else {
-                        res.status(500).json({ error: { message: e.message } });
-                    }
-                }
+                if (!res.headersSent) { if (stream) { res.setHeader("Content-Type", "text/event-stream"); res.write(`data: ${JSON.stringify({ type: "error", error: e.message, done: true })}\n\n`); res.end(); } else { res.status(500).json({ error: { message: e.message } }); } }
             }
             return;
         }
@@ -215,22 +167,50 @@ router.post("/conversations/:id/messages", async (req, res) => {
             res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache"); res.setHeader("Connection", "keep-alive"); res.flushHeaders();
             let hadAudioAlready = false;
             try {
-                const { content: assistantContent, finishReason, lastImageBase64: newLastImageBase64, lastImageMimeType: newLastImageMimeType, lastImageUrl: newLastImageUrl } = await runToolLoop({
-                    models: activeModels, messages: fullMessages, tools: toolsForThisTurn, toolChoice: "auto", temperature, maxTokens: max_tokens, reasoningEffort,
-                    toolContext: { lastImageBase64, lastImageMimeType, lastImageUrl },
-                    onToolCall: ({ name, args }) => { res.write(`data: ${JSON.stringify({ type: "tool_call", tool: name, input: args, done: false })}\n\n`); },
-                    onToolResult: ({ name, result }) => {
-                        if (result && result.error) console.error(`[tool ${name}] échec :`, result.error);
-                        if ((name === "generate_image" || name === "generate_voice" || name === "edit_image") && result && result.base64) {
-                            if (name === "generate_voice") hadAudioAlready = true;
-                            res.write(`data: ${JSON.stringify({ type: "media", tool: name, mediaType: result.type, base64: result.base64, mimeType: result.mimeType, done: false })}\n\n`);
-                        }
-                    }
+                // Ici, on utilise le STREAMING DIRECT de Groq
+                const body = { model: activeModels[0], messages: fullMessages, temperature, max_tokens: max_tokens, stream: true };
+                if (toolsForThisTurn) { body.tools = toolsForThisTurn; body.tool_choice = "auto"; }
+                if (body.model.includes("gpt-oss")) body.reasoning_effort = reasoningEffort;
+
+                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.GROQ_API_KEY}` },
+                    body: JSON.stringify(body)
                 });
-                await simulateStream(assistantContent, (chunk) => { res.write(`data: ${JSON.stringify({ type: "delta", delta: chunk, done: false })}\n\n`); });
-                const autoVoice = await maybeAutoVoice(assistantContent, hadAudioAlready);
+
+                if (!response.ok) throw new Error(`Groq API error ${response.status}`);
+
+                const decoder = new TextDecoder();
+                let buffer = "";
+                let fullText = "";
+                let finishReason = "stop";
+
+                for await (const chunk of response.body) {
+                    buffer += decoder.decode(chunk, { stream: true });
+                    const parts = buffer.split("\n\n");
+                    buffer = parts.pop();
+                    for (const part of parts) {
+                        const line = part.trim();
+                        if (!line.startsWith("data:")) continue;
+                        const data = line.slice(5).trim();
+                        if (data === "[DONE]") continue;
+                        try {
+                            const json = JSON.parse(data);
+                            const delta = json.choices?.[0]?.delta?.content;
+                            const reason = json.choices?.[0]?.finish_reason;
+                            if (reason) finishReason = reason;
+                            if (delta) {
+                                fullText += delta;
+                                res.write(`data: ${JSON.stringify({ type: "delta", delta: delta, done: false })}\n\n`);
+                            }
+                        } catch (e) {}
+                    }
+                }
+
+                const autoVoice = await generateVoice({ text: fullText, lang: detectLanguage(fullText) }).catch(() => null);
                 if (autoVoice) res.write(`data: ${JSON.stringify({ type: "media", tool: "generate_voice", mediaType: "audio", base64: autoVoice.base64, mimeType: autoVoice.mimeType, done: false })}\n\n`);
-                await finalizeConversation(assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl);
+
+                await finalizeConversation(fullText, null, null, null);
                 res.write(`data: ${JSON.stringify({ type: "done", done: true, finishReason })}\n\n`); res.end();
             } catch (e) {
                 console.error(e); res.write(`data: ${JSON.stringify({ type: "error", error: "Erreur du modèle.", done: true })}\n\n`); res.end();
@@ -238,23 +218,8 @@ router.post("/conversations/:id/messages", async (req, res) => {
             return;
         }
 
-        const mediaResults = [];
-        let hadAudioAlready = false;
-        const { content: assistantContent, finishReason, usage, toolsUsed, lastImageBase64: newLastImageBase64, lastImageMimeType: newLastImageMimeType, lastImageUrl: newLastImageUrl } = await runToolLoop({
-            models: activeModels, messages: fullMessages, tools: toolsForThisTurn, toolChoice: "auto", temperature, maxTokens: max_tokens, reasoningEffort,
-            toolContext: { lastImageBase64, lastImageMimeType, lastImageUrl },
-            onToolResult: ({ name, result }) => {
-                if (result && result.error) console.error(`[tool ${name}] échec :`, result.error);
-                if ((name === "generate_image" || name === "generate_voice" || name === "edit_image") && result && result.base64) {
-                    if (name === "generate_voice") hadAudioAlready = true;
-                    mediaResults.push({ tool: name, mediaType: result.type, base64: result.base64, mimeType: result.mimeType });
-                }
-            }
-        });
-        const autoVoice = await maybeAutoVoice(assistantContent, hadAudioAlready);
-        if (autoVoice) mediaResults.push({ tool: "generate_voice", mediaType: "audio", base64: autoVoice.base64, mimeType: autoVoice.mimeType });
-        await finalizeConversation(assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl);
-        res.json({ role: "assistant", content: assistantContent, finishReason, usage, toolsUsed, media: mediaResults });
+        // Fallback non-streaming (si besoin)
+        res.json({ role: "assistant", content: "Streaming désactivé pour cette requête." });
     } catch (e) { console.error(e); res.status(500).json({ error: { message: "Erreur serveur." } }); }
 });
 
