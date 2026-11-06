@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 
 const auth = require("./middleware/auth");
 const publicRateLimit = require("./middleware/publicRateLimit");
@@ -8,6 +9,7 @@ const completionsRoutes = require("./routes/completions");
 const conversationsRoutes = require("./routes/conversations");
 const mediaRoutes = require("./routes/media");
 const diagnosticsRoutes = require("./routes/diagnostics");
+const userAuthRoutes = require("./routes/userAuth");
 const { renderChatPage } = require("./routes/webChat");
 
 const app = express();
@@ -28,11 +30,31 @@ app.get("/status", (req, res) => {
     });
 });
 
+// Route pour récupérer les infos de l'utilisateur connecté
+app.get("/api/me", (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Non autorisé" });
+    }
+    const token = authHeader.split(" ")[1];
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        res.json({ userId: decoded.userId, email: decoded.email });
+    } catch (e) {
+        res.status(401).json({ error: "Token invalide" });
+    }
+});
+
+// Routes d'authentification (Google)
+app.use("/api/auth", userAuthRoutes);
+
+// Routes protégées par la clé API (pour le bot et l'API externe)
 app.use("/v1", auth, completionsRoutes);
 app.use("/v1", auth, conversationsRoutes);
 app.use("/v1", auth, mediaRoutes);
 app.use("/diagnostics", diagnosticsRoutes);
 
+// Routes publiques (pour le site web)
 app.use("/public/v1", publicRateLimit, conversationsRoutes);
 app.use("/public/v1", publicRateLimit, mediaRoutes);
 
