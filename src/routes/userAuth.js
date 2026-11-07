@@ -5,9 +5,14 @@ const crypto = require("crypto");
 const { db, ensureSchema } = require("../db");
 
 const router = express.Router();
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// URL de production en dur (identique à celle de Google Cloud)
+// On nettoie les variables au cas où il y aurait des espaces ou des sauts de ligne invisibles
+const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || "").trim();
+const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+const JWT_SECRET = (process.env.JWT_SECRET || "").trim();
+
+const client = new OAuth2Client(GOOGLE_CLIENT_ID);
+
 const REDIRECT_URI = "https://sonic-gpt.vercel.app/api/auth/google/callback";
 
 router.get("/google", (req, res) => {
@@ -27,17 +32,18 @@ router.get("/google/callback", async (req, res) => {
     try {
         await ensureSchema();
         
-        // On passe EXACTEMENT la même URL qu'à l'étape précédente
+        // On force l'envoi du code, du redirect_uri et du secret
         const { tokens } = await client.getToken({
             code: code,
-            redirect_uri: REDIRECT_URI
+            redirect_uri: REDIRECT_URI,
+            client_secret: GOOGLE_CLIENT_SECRET
         });
         
         client.setCredentials(tokens);
 
         const ticket = await client.verifyIdToken({
             idToken: tokens.id_token,
-            audience: process.env.GOOGLE_CLIENT_ID
+            audience: GOOGLE_CLIENT_ID
         });
         const payload = ticket.getPayload();
         const { email, name, picture } = payload;
@@ -52,7 +58,7 @@ router.get("/google/callback", async (req, res) => {
             userId = userResult.rows[0].id;
         }
 
-        const token = jwt.sign({ userId, email }, process.env.JWT_SECRET, { expiresIn: "7d" });
+        const token = jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: "7d" });
         res.redirect(`/?token=${token}`);
     } catch (e) {
         console.error("[auth] Erreur Google :", e.message);
