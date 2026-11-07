@@ -6,21 +6,23 @@ const { db, ensureSchema } = require("../db");
 
 const router = express.Router();
 
-// On nettoie les variables au cas où il y aurait des espaces ou des sauts de ligne invisibles
 const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || "").trim();
 const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
 const JWT_SECRET = (process.env.JWT_SECRET || "").trim();
-
-const client = new OAuth2Client(GOOGLE_CLIENT_ID);
-
 const REDIRECT_URI = "https://sonic-gpt.vercel.app/api/auth/google/callback";
 
+function createClient() {
+    return new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, REDIRECT_URI);
+}
+
 router.get("/google", (req, res) => {
-    const authorizeUrl = client.generateAuthUrl({
+    const authorizeUrl = createClient().generateAuthUrl({
         access_type: "offline",
-        scope: ["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"],
-        prompt: "consent",
-        redirect_uri: REDIRECT_URI
+        scope: [
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "https://www.googleapis.com/auth/userinfo.email"
+        ],
+        prompt: "consent"
     });
     res.redirect(authorizeUrl);
 });
@@ -31,29 +33,28 @@ router.get("/google/callback", async (req, res) => {
 
     try {
         await ensureSchema();
-        
-        // On force l'envoi du code, du redirect_uri et du secret
-        const { tokens } = await client.getToken({
-            code: code,
-            redirect_uri: REDIRECT_URI,
-            client_secret: GOOGLE_CLIENT_SECRET
-        });
-        
-        client.setCredentials(tokens);
+
+        const client = createClient();
+        const { tokens } = await client.getToken(code);
 
         const ticket = await client.verifyIdToken({
             idToken: tokens.id_token,
             audience: GOOGLE_CLIENT_ID
         });
-        const payload = ticket.getPayload();
-        const { email, name, picture } = payload;
+        const { email, name, picture } = ticket.getPayload();
 
-        const userResult = await db.execute({ sql: "SELECT * FROM users WHERE email = ?", args: [email] });
+        const userResult = await db.execute({
+            sql: "SELECT id FROM users WHERE email = ?",
+            args: [email]
+        });
+
         let userId;
-
         if (userResult.rows.length === 0) {
             userId = crypto.randomUUID();
-            await db.execute({ sql: "INSERT INTO users (id, email, name, avatar_url) VALUES (?, ?, ?, ?)", args: [userId, email, name || "Utilisateur", picture || null] });
+            await db.execute({
+                sql: "INSERT INTO users (id, email, name, avatar_url) VALUES (?, ?, ?, ?)",
+                args: [userId, email, name || "Utilisateur", picture || null]
+            });
         } else {
             userId = userResult.rows[0].id;
         }
@@ -62,7 +63,7 @@ router.get("/google/callback", async (req, res) => {
         res.redirect(`/?token=${token}`);
     } catch (e) {
         console.error("[auth] Erreur Google :", e.message);
-        res.status(500).send("Erreur d'authentification. Détails : " + e.message);
+        res.status(500).send("Erreur d'authentification.");
     }
 });
 
