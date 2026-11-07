@@ -1,19 +1,28 @@
-function auth(req, res, next) {
-    const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : req.headers["x-api-key"];
-    const expected = process.env.SONICGPT_API_KEY;
+const jwt = require("jsonwebtoken");
 
-    if (!expected) {
-        return res.status(500).json({
-            error: { message: "SONICGPT_API_KEY non configurée côté serveur.", type: "server_error" }
-        });
+module.exports = function auth(req, res, next) {
+    const authHeader = req.headers.authorization || req.headers["x-api-key"];
+
+    if (!authHeader) {
+        return res.status(401).json({ error: { message: "Authentification requise." } });
     }
-    if (!token || token !== expected) {
-        return res.status(401).json({
-            error: { message: "Clé API invalide ou manquante.", type: "invalid_request_error" }
-        });
+
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+
+    if (token.startsWith("ey")) {
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            req.user = decoded;
+            return next();
+        } catch (e) {
+            return res.status(401).json({ error: { message: "Token JWT invalide ou expiré." } });
+        }
     }
+
+    const apiKey = process.env.SONICGPT_API_KEY;
+    if (token !== apiKey) {
+        return res.status(401).json({ error: { message: "Clé API invalide." } });
+    }
+
     next();
-}
-
-module.exports = auth;
+};
