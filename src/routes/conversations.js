@@ -19,14 +19,19 @@ function detectReasoningEffort(text) {
     return complexKeywords.test(text || "") ? "medium" : "low";
 }
 
-// ... (les routes POST /conversations, GET, DELETE, etc. restent identiques)
 router.post("/conversations", async (req, res) => {
     await ensureSchema();
     try {
         const { model = DEFAULT_MODEL, title, ownerId } = req.body || {};
         if (!MODELS[model]) return res.status(400).json({ error: { message: "Modèle inconnu." } });
+        
+        const effectiveOwnerId = req.user ? req.user.userId : (ownerId || null);
+        
         const id = crypto.randomUUID();
-        await db.execute({ sql: "INSERT INTO conversations (id, title, model, owner_id) VALUES (?, ?, ?, ?)", args: [id, title || "Nouvelle conversation", model, ownerId || null] });
+        await db.execute({ 
+            sql: "INSERT INTO conversations (id, title, model, owner_id) VALUES (?, ?, ?, ?)", 
+            args: [id, title || "Nouvelle conversation", model, effectiveOwnerId] 
+        });
         res.status(201).json({ id, title: title || "Nouvelle conversation", model });
     } catch (e) { console.error(e); res.status(500).json({ error: { message: "Erreur serveur." } }); }
 });
@@ -35,10 +40,19 @@ router.get("/conversations", async (req, res) => {
     await ensureSchema();
     try {
         let { ownerId, page = 1, limit = 20 } = req.query;
-        page = Math.max(1, parseInt(page, 10) || 1); limit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+        page = Math.max(1, parseInt(page, 10) || 1); 
+        limit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
         const offset = (page - 1) * limit;
-        const where = ownerId ? "WHERE owner_id = ?" : ""; const args = ownerId ? [ownerId] : [];
-        const result = await db.execute({ sql: `SELECT id, title, model, created_at, updated_at FROM conversations ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`, args: [...args, limit, offset] });
+
+        const effectiveOwnerId = req.user ? req.user.userId : ownerId;
+        
+        const where = effectiveOwnerId ? "WHERE owner_id = ?" : ""; 
+        const args = effectiveOwnerId ? [effectiveOwnerId] : [];
+
+        const result = await db.execute({ 
+            sql: `SELECT id, title, model, created_at, updated_at FROM conversations ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`, 
+            args: [...args, limit, offset] 
+        });
         res.json({ conversations: result.rows, page, limit });
     } catch (e) { console.error(e); res.status(500).json({ error: { message: "Erreur serveur." } }); }
 });
@@ -46,9 +60,14 @@ router.get("/conversations", async (req, res) => {
 router.get("/conversations/:id", async (req, res) => {
     await ensureSchema();
     try {
-        const convResult = await db.execute({ sql: "SELECT id, title, model, created_at, updated_at FROM conversations WHERE id = ?", args: [req.params.id] });
+        const convResult = await db.execute({ sql: "SELECT * FROM conversations WHERE id = ?", args: [req.params.id] });
         const conversation = convResult.rows[0];
         if (!conversation) return res.status(404).json({ error: { message: "Conversation introuvable." } });
+
+        if (req.user && conversation.owner_id !== req.user.userId) {
+            return res.status(403).json({ error: { message: "Accès refusé." } });
+        }
+
         const messagesResult = await db.execute({ sql: "SELECT id, role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY id ASC", args: [req.params.id] });
         res.json({ ...conversation, messages: messagesResult.rows });
     } catch (e) { console.error(e); res.status(500).json({ error: { message: "Erreur serveur." } }); }
@@ -57,8 +76,15 @@ router.get("/conversations/:id", async (req, res) => {
 router.delete("/conversations/:id", async (req, res) => {
     await ensureSchema();
     try {
-        const result = await db.execute({ sql: "DELETE FROM conversations WHERE id = ?", args: [req.params.id] });
-        if (result.rowsAffected === 0) return res.status(404).json({ error: { message: "Conversation introuvable." } });
+        const convResult = await db.execute({ sql: "SELECT owner_id FROM conversations WHERE id = ?", args: [req.params.id] });
+        const conversation = convResult.rows[0];
+        if (!conversation) return res.status(404).json({ error: { message: "Conversation introuvable." } });
+        
+        if (req.user && conversation.owner_id !== req.user.userId) {
+            return res.status(403).json({ error: { message: "Accès refusé." } });
+        }
+
+        await db.execute({ sql: "DELETE FROM conversations WHERE id = ?", args: [req.params.id] });
         res.json({ message: "Conversation supprimée." });
     } catch (e) { console.error(e); res.status(500).json({ error: { message: "Erreur serveur." } }); }
 });
@@ -73,6 +99,10 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const convResult = await db.execute({ sql: "SELECT * FROM conversations WHERE id = ?", args: [req.params.id] });
         const conversation = convResult.rows[0];
         if (!conversation) return res.status(404).json({ error: { message: "Conversation introuvable." } });
+
+        if (req.user && conversation.owner_id !== req.user.userId) {
+            return res.status(403).json({ error: { message: "Accès refusé." } });
+        }
 
         const IDLE_RESET_MS = 5 * 60 * 1000;
         const lastActivity = new Date(conversation.updated_at.replace(" ", "T") + "Z").getTime();
@@ -213,7 +243,6 @@ router.post("/conversations/:id/messages", async (req, res) => {
             return;
         }
 
-        // Si le mode streaming est explicitement désactivé (ex: par un bot), on renvoie du JSON classique
         try {
             const result = await callMistralOnce({ model: activeModels[0], messages: fullMessages, tools: toolsForThisTurn, toolChoice: "auto", temperature, maxTokens: max_tokens, reasoningEffort });
             await finalizeConversation(result.message.content || "", null, null, null);
