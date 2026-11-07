@@ -19,14 +19,22 @@ function detectReasoningEffort(text) {
     return complexKeywords.test(text || "") ? "medium" : "low";
 }
 
+function withTimeout(promise, ms, label) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error((label || "Opération") + " : délai dépassé")), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 router.post("/conversations", async (req, res) => {
     await ensureSchema();
     try {
         const { model = DEFAULT_MODEL, title, ownerId } = req.body || {};
         if (!MODELS[model]) return res.status(400).json({ error: { message: "Modèle inconnu." } });
-        
+
         const effectiveOwnerId = req.user ? req.user.userId : (ownerId || null);
-        
+
         const id = crypto.randomUUID();
         await db.execute({ 
             sql: "INSERT INTO conversations (id, title, model, owner_id) VALUES (?, ?, ?, ?)", 
@@ -45,7 +53,7 @@ router.get("/conversations", async (req, res) => {
         const offset = (page - 1) * limit;
 
         const effectiveOwnerId = req.user ? req.user.userId : ownerId;
-        
+
         const where = effectiveOwnerId ? "WHERE owner_id = ?" : ""; 
         const args = effectiveOwnerId ? [effectiveOwnerId] : [];
 
@@ -79,7 +87,7 @@ router.delete("/conversations/:id", async (req, res) => {
         const convResult = await db.execute({ sql: "SELECT owner_id FROM conversations WHERE id = ?", args: [req.params.id] });
         const conversation = convResult.rows[0];
         if (!conversation) return res.status(404).json({ error: { message: "Conversation introuvable." } });
-        
+
         if (req.user && conversation.owner_id !== req.user.userId) {
             return res.status(403).json({ error: { message: "Accès refusé." } });
         }
@@ -134,7 +142,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
         const VISION_MODELS = ["qwen/qwen3.8-27b", "meta-llama/llama-4-scout-17b-16e-instruct"];
         const activeModels = effectiveImageUrl ? VISION_MODELS : [modelConfig.mistralModel];
         const toolsForThisTurn = webAccess ? TOOLS : undefined;
-        
+
         const reasoningEffort = detectReasoningEffort(content);
 
         const finalizeConversation = async (assistantContent, newLastImageBase64, newLastImageMimeType, newLastImageUrl) => {
@@ -152,24 +160,37 @@ router.post("/conversations/:id/messages", async (req, res) => {
         };
 
         const imageKeywords = /(dessine|génère|genere|crée|cree|image|dessin|illustration|photo)/i;
-        const forceImageTool = imageKeywords.test(content || "") && source === "web";
+        const forceImageTool = imageKeywords.test(content || "") && source === "web" && !effectiveImageUrl;
 
         if (forceImageTool && webAccess) {
+            const startedAt = Date.now();
             try {
                 let cleanPrompt = content;
                 try {
-                    const promptGen = await callMistralOnce({ model: modelConfig.mistralModel, messages: [{ role: "system", content: "Traduis cette demande d'image en un prompt clair et descriptif en ANGLAIS." }, { role: "user", content: content }], temperature: 0.7, maxTokens: 100, reasoningEffort: "low" });
+                    const promptGen = await withTimeout(
+                        callMistralOnce({ model: modelConfig.mistralModel, messages: [{ role: "system", content: "Traduis cette demande d'image en un prompt clair et descriptif en ANGLAIS." }, { role: "user", content: content }], temperature: 0.7, maxTokens: 100, reasoningEffort: "low" }),
+                        8000,
+                        "Traduction du prompt"
+                    );
                     if (promptGen && promptGen.message && promptGen.message.content) cleanPrompt = promptGen.message.content.trim().replace(/^"|"$/g, '');
-                } catch (e) {}
+                } catch (e) { console.error("[image] prompt :", e.message); }
+                console.log("[image] prompt prêt après", Date.now() - startedAt, "ms");
 
-                const toolResult = await executeTool("generate_image", JSON.stringify({ prompt: cleanPrompt }), { lastImageBase64, lastImageMimeType });
-                
+                const reactionPromise = withTimeout(
+                    callMistralOnce({ model: modelConfig.mistralModel, messages: [{ role: "system", content: "Écris une phrase courte pour accompagner l'image, avec un emoji." }, { role: "user", content: `J'ai demandé : "${content}".` }], temperature: 0.8, maxTokens: 50, reasoningEffort: "low" }),
+                    8000,
+                    "Réaction"
+                ).then(r => (r && r.message && r.message.content ? r.message.content.trim() : null)).catch(() => null);
+
+                const toolResult = await withTimeout(
+                    executeTool("generate_image", JSON.stringify({ prompt: cleanPrompt }), { lastImageBase64, lastImageMimeType }),
+                    40000,
+                    "Génération d'image"
+                );
+                console.log("[image] génération terminée après", Date.now() - startedAt, "ms", toolResult ? Object.keys(toolResult) : null);
+
                 if (toolResult && toolResult.base64) {
-                    let finalText = "Tiens, voici ton image ! 🎨";
-                    try {
-                        const reaction = await callMistralOnce({ model: modelConfig.mistralModel, messages: [{ role: "system", content: "Écris une phrase courte pour accompagner l'image, avec un emoji." }, { role: "user", content: `J'ai demandé : "${content}".` }], temperature: 0.8, maxTokens: 50, reasoningEffort: "low" });
-                        if (reaction && reaction.message && reaction.message.content) finalText = reaction.message.content.trim();
-                    } catch (e) {}
+                    const finalText = (await reactionPromise) || "Tiens, voici ton image ! 🎨";
 
                     await finalizeConversation(finalText, toolResult.base64, toolResult.mimeType, null);
                     if (stream) {
@@ -180,10 +201,12 @@ router.post("/conversations/:id/messages", async (req, res) => {
                     } else { res.json({ role: "assistant", content: finalText, media: [{ tool: "generate_image", mediaType: "image", base64: toolResult.base64, mimeType: toolResult.mimeType }] }); }
                 } else {
                     const errorMsg = toolResult?.error || "Erreur inconnue";
+                    console.error("[image] échec :", errorMsg);
                     if (stream) { res.setHeader("Content-Type", "text/event-stream"); res.write(`data: ${JSON.stringify({ type: "error", error: errorMsg, done: true })}\n\n`); res.end(); }
                     else { res.status(500).json({ error: { message: errorMsg } }); }
                 }
             } catch (e) {
+                console.error("[image] erreur :", e.message);
                 if (!res.headersSent) { if (stream) { res.setHeader("Content-Type", "text/event-stream"); res.write(`data: ${JSON.stringify({ type: "error", error: e.message, done: true })}\n\n`); res.end(); } else { res.status(500).json({ error: { message: e.message } }); } }
             }
             return;
