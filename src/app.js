@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const { db, ensureSchema } = require("./db");
 
 const auth = require("./middleware/auth");
 const publicRateLimit = require("./middleware/publicRateLimit");
@@ -23,15 +24,10 @@ app.get("/", (req, res) => {
 });
 
 app.get("/status", (req, res) => {
-    res.json({
-        name: "SonicGPT API",
-        docs: "Voir README.md pour la liste complète des routes.",
-        health: "ok"
-    });
+    res.json({ name: "SonicGPT API", health: "ok" });
 });
 
-// Route pour récupérer les infos de l'utilisateur connecté
-app.get("/api/me", (req, res) => {
+app.get("/api/me", async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
         return res.status(401).json({ error: "Non autorisé" });
@@ -39,22 +35,33 @@ app.get("/api/me", (req, res) => {
     const token = authHeader.split(" ")[1];
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        res.json({ userId: decoded.userId, email: decoded.email });
+        await ensureSchema();
+        const userResult = await db.execute({
+            sql: "SELECT id, email, name, avatar_url FROM users WHERE id = ?",
+            args: [decoded.userId]
+        });
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ error: "Utilisateur introuvable" });
+        }
+        const user = userResult.rows[0];
+        res.json({
+            userId: user.id,
+            email: user.email,
+            name: user.name,
+            avatarUrl: user.avatar_url
+        });
     } catch (e) {
         res.status(401).json({ error: "Token invalide" });
     }
 });
 
-// Routes d'authentification (Google)
 app.use("/api/auth", userAuthRoutes);
 
-// Routes protégées par la clé API (pour le bot et l'API externe)
 app.use("/v1", auth, completionsRoutes);
 app.use("/v1", auth, conversationsRoutes);
 app.use("/v1", auth, mediaRoutes);
 app.use("/diagnostics", diagnosticsRoutes);
 
-// Routes publiques (pour le site web)
 app.use("/public/v1", publicRateLimit, conversationsRoutes);
 app.use("/public/v1", publicRateLimit, mediaRoutes);
 
@@ -62,7 +69,6 @@ app.use((req, res) => {
     res.status(404).json({ error: { message: "Route introuvable." } });
 });
 
-// eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
     console.error(err);
     res.status(500).json({ error: { message: "Erreur serveur inattendue." } });
