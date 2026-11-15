@@ -19,14 +19,9 @@ export default async function handler(req, res) {
     },
     sonic: {
       url: "https://sonic-gpt.vercel.app",
-      key: process.env.SONIC_CHAT_KEY || SECRET,
-      model: process.env.SONIC_MODEL || "default"
+      key: SECRET,
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash"
     },
-    // Fallback optionnel
-    openrouter: {
-      key: process.env.OPENROUTER_API_KEY || "",
-      model: process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-super-120b-a12b:free"
-    },
-    allowed: [""61593588167628"]
+    allowed: ["61593588167628"]
   });
 }
