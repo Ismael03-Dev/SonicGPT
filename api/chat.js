@@ -2,36 +2,58 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
   const SECRET = process.env.COPILOT_SECRET || "ismael04-lag-developper";
-  const auth = req.headers["authorization"] || "";
-  if (auth !== `Bearer ${SECRET}`) return res.status(403).json({ error: "Accès refusé" });
+  if ((req.headers["authorization"] || "") !== `Bearer ${SECRET}`)
+    return res.status(403).json({ error: "Accès refusé" });
 
   try {
     const { messages, model, max_tokens, temperature } = req.body || {};
     if (!Array.isArray(messages)) return res.status(400).json({ error: "messages requis" });
 
-    // 👇 Ici tu branches ce que tu veux : OpenRouter, Gemini, Groq, local…
-    const upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const GEMINI_KEY = process.env.GEMINI_API_KEY;
+    if (!GEMINI_KEY) return res.status(500).json({ error: "GEMINI_API_KEY manquante" });
+
+    const contents = messages
+      .filter(m => m.role !== "system")
+      .map(m => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }]
+      }));
+
+    const systemMsg = messages.find(m => m.role === "system");
+    const systemInstruction = systemMsg
+      ? { parts: [{ text: systemMsg.content }] }
+      : undefined;
+
+    const geminiModel = model || process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
+
+    const upstream = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "https://sonic-gpt.vercel.app",
-        "X-Title": "Sonic-GPT"
+        "x-goog-api-key": GEMINI_KEY
       },
       body: JSON.stringify({
-        model: model || process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-super-120b-a12b:free",
-        messages,
-        max_tokens: max_tokens || 4096,
-        temperature: temperature ?? 0.3
+        contents,
+        ...(systemInstruction ? { systemInstruction } : {}),
+        generationConfig: {
+          temperature: temperature ?? 0.3,
+          maxOutputTokens: max_tokens || 8192
+        }
       })
     });
 
     const data = await upstream.json();
     if (!upstream.ok) return res.status(upstream.status).json(data);
 
-    // Format unifié : { reply: "..." }
-    const reply = data.choices?.[0]?.message?.content || "";
-    return res.status(200).json({ reply, raw: data });
+    const reply = data.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "";
+
+    if (!reply.trim()) {
+      const finishReason = data.candidates?.[0]?.finishReason || "inconnu";
+      return res.status(500).json({ error: `Réponse Gemini vide (finishReason: ${finishReason})` });
+    }
+
+    return res.status(200).json({ reply });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
