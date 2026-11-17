@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     sonic: {
       url: "https://sonic-gpt.vercel.app",
       key: SECRET,
-      model: process.env.GEMINI_MODEL || "gemini-2.5-flash"
+      model: process.env.GEMINI_MODEL || "gemini-3.5-flash-lite"
     },
     allowed: ["61593588167628"]
   });
